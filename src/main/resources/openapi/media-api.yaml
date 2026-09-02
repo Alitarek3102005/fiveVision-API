@@ -1,0 +1,170 @@
+openapi: 3.0.3
+info:
+  title: 5Vision Media API
+  version: 1.1.0
+  description: Handles media uploads, MinIO presigned URLs, and asset metadata.
+
+tags:
+  - name: Media
+    description: Media asset management
+
+paths:
+  /api/v1/media:
+    get:
+      tags: [Media]
+      summary: List and filter media assets (Admin/Author)
+      operationId: getMediaAssets
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 0 }
+        - name: size
+          in: query
+          schema: { type: integer, default: 20 }
+        - name: sort
+          in: query
+          schema: { type: string, default: "createdAt,desc" }
+        - name: type
+          in: query
+          schema: { type: string, enum: [PHOTO, VIDEO, THUMBNAIL] }
+        - name: status
+          in: query
+          schema: { type: string, enum: [PROCESSING, READY, FAILED] }
+      responses:
+        '200':
+          description: Paginated media assets
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagedMediaResponse'
+
+  /api/v1/media/upload-url:
+    post:
+      tags: [Media]
+      summary: Request a presigned MinIO URL for direct client upload
+      operationId: initiateUpload
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InitiateUploadRequest'
+      responses:
+        '200':
+          description: Presigned URL generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InitiateUploadResponse'
+
+  /api/v1/media/{id}/complete:
+    post:
+      tags: [Media]
+      summary: Confirm upload completion and save technical metadata
+      operationId: completeUpload
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteUploadRequest'
+      responses:
+        '200':
+          description: Upload marked as READY
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MediaAssetResponse'
+
+  /api/v1/media/{id}:
+    get:
+      tags: [Media]
+      summary: Get media asset details
+      operationId: getMediaById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Asset details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MediaAssetResponse'
+    delete:
+      tags: [Media]
+      summary: Delete a media asset and its MinIO object
+      operationId: deleteMedia
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: Deleted
+
+components:
+  schemas:
+    PagedMediaResponse:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/MediaAssetResponse'
+        pageNumber: { type: integer }
+        pageSize: { type: integer }
+        totalElements: { type: integer, format: int64 }
+        totalPages: { type: integer }
+        isLast: { type: boolean }
+
+    InitiateUploadRequest:
+      type: object
+      required: [fileName, mimeType, sizeBytes, type]
+      properties:
+        fileName: { type: string }
+        mimeType: { type: string }
+        sizeBytes: { type: integer, format: int64 }
+        type: { type: string, enum: [PHOTO, VIDEO, THUMBNAIL] }
+
+    InitiateUploadResponse:
+      type: object
+      properties:
+        mediaId: { type: string, format: uuid }
+        uploadUrl: { type: string, format: uri }
+        fileKey: { type: string }
+        expiresAt: { type: string, format: date-time }
+
+    CompleteUploadRequest:
+      type: object
+      properties:
+        resolutionWidth: { type: integer }
+        resolutionHeight: { type: integer }
+        durationSeconds: { type: integer }
+        cameraModel: { type: string }
+        lensInfo: { type: string }
+
+    MediaAssetResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        uploaderId: { type: string, format: uuid }
+        type: { type: string, enum: [PHOTO, VIDEO, THUMBNAIL] }
+        status: { type: string, enum: [PROCESSING, READY, FAILED] }
+        cdnUrl: { type: string, format: uri }
+        fileSizeBytes: { type: integer, format: int64 }
+        mimeType: { type: string }
+        resolutionWidth: { type: integer }
+        resolutionHeight: { type: integer }
+        durationSeconds: { type: integer }
+        cameraModel: { type: string }
+        lensInfo: { type: string }
+        createdAt: { type: string, format: date-time }

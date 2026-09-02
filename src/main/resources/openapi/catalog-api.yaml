@@ -1,0 +1,481 @@
+openapi: 3.0.3
+info:
+  title: 5Vision Catalog API
+  version: 1.2.0
+  description: Complete advanced contract for nature cards, taxonomies, and user favorites.
+
+tags:
+  - name: Cards
+  - name: Favorites
+  - name: Taxonomy
+
+paths:
+  /api/v1/cards:
+    get:
+      tags: [Cards]
+      summary: List and filter published cards
+      operationId: getCards
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 0 }
+        - name: size
+          in: query
+          schema: { type: integer, default: 20 }
+        - name: sort
+          in: query
+          description: "Format: property,asc|desc. Default: createdAt,desc"
+          schema: { type: string, default: "createdAt,desc" }
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: categoryId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: tagId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: isPremium
+          in: query
+          schema: { type: boolean }
+      responses:
+        '200':
+          description: Paginated cards
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagedCardResponse'
+    post:
+      tags: [Cards]
+      summary: Create card
+      operationId: createCard
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCardRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardDetailResponse'
+
+  /api/v1/cards/my-cards:
+    get:
+      tags: [Cards]
+      summary: List cards owned by the authenticated user
+      operationId: getMyCards
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 0 }
+        - name: size
+          in: query
+          schema: { type: integer, default: 20 }
+        - name: status
+          in: query
+          schema: { type: string, enum: [DRAFT, PUBLISHED, ARCHIVED] }
+        - name: sort
+          in: query
+          schema: { type: string, default: "updatedAt,desc" }
+      responses:
+        '200':
+          description: Paginated cards
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagedCardResponse'
+
+  /api/v1/cards/favorites:
+    get:
+      tags: [Favorites]
+      summary: List user's favorited cards
+      operationId: getFavoriteCards
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 0 }
+        - name: size
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        '200':
+          description: Paginated favorites
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagedCardResponse'
+
+  /api/v1/cards/{id}:
+    get:
+      tags: [Cards]
+      summary: Get card by ID
+      operationId: getCardById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Card details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardDetailResponse'
+    put:
+      tags: [Cards]
+      summary: Update card
+      operationId: updateCard
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCardRequest'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardDetailResponse'
+    delete:
+      tags: [Cards]
+      summary: Delete card
+      operationId: deleteCard
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: Deleted
+
+  /api/v1/cards/{id}/view:
+    post:
+      tags: [Cards]
+      summary: Increment view count for a card
+      operationId: incrementCardView
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: View count incremented
+
+  /api/v1/cards/{id}/favorite:
+    post:
+      tags: [Favorites]
+      summary: Favorite a card
+      operationId: favoriteCard
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: Favorited
+    delete:
+      tags: [Favorites]
+      summary: Unfavorite a card
+      operationId: unfavoriteCard
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: Unfavorited
+
+  /api/v1/categories:
+    get:
+      tags: [Taxonomy]
+      summary: List all categories (hierarchical)
+      operationId: getCategories
+      parameters:
+        - name: tree
+          in: query
+          description: If true, returns only top-level categories with their children nested.
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: List of categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CategoryResponse'
+    post:
+      tags: [Taxonomy]
+      summary: Create a new category
+      operationId: createCategory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCategoryRequest'
+      responses:
+        '201':
+          description: Category created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryResponse'
+
+  /api/v1/categories/{id}:
+    put:
+      tags: [Taxonomy]
+      summary: Update category
+      operationId: updateCategory
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCategoryRequest'
+      responses:
+        '200':
+          description: Category updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryResponse'
+    delete:
+      tags: [Taxonomy]
+      summary: Delete category
+      operationId: deleteCategory
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: Category deleted
+
+  /api/v1/tags:
+    get:
+      tags: [Taxonomy]
+      summary: List tags
+      operationId: getTags
+      responses:
+        '200':
+          description: List of tags
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TagResponse'
+    post:
+      tags: [Taxonomy]
+      summary: Create tag
+      operationId: createTag
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTagRequest'
+      responses:
+        '201':
+          description: Tag created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagResponse'
+
+  /api/v1/tags/{id}:
+    put:
+      tags: [Taxonomy]
+      summary: Update tag
+      operationId: updateTag
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTagRequest'
+      responses:
+        '200':
+          description: Tag updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagResponse'
+    delete:
+      tags: [Taxonomy]
+      summary: Delete tag
+      operationId: deleteTag
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: Tag deleted
+
+components:
+  schemas:
+    PagedCardResponse:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/CardSummaryResponse'
+        pageNumber:
+          type: integer
+        pageSize:
+          type: integer
+        totalElements:
+          type: integer
+          format: int64
+        totalPages:
+          type: integer
+        isLast:
+          type: boolean
+
+    CreateCardRequest:
+      type: object
+      required: [title, speciesScientificName, primaryMediaId]
+      properties:
+        title: { type: string }
+        description: { type: string }
+        speciesCommonName: { type: string }
+        speciesScientificName: { type: string }
+        conservationStatus: { type: string }
+        locationName: { type: string }
+        latitude: { type: number, format: double }
+        longitude: { type: number, format: double }
+        primaryMediaId: { type: string, format: uuid }
+        thumbnailMediaId: { type: string, format: uuid }
+        isPremium: { type: boolean, default: false }
+        price: { type: number, format: double }
+        categoryIds:
+          type: array
+          items: { type: string, format: uuid }
+        tagIds:
+          type: array
+          items: { type: string, format: uuid }
+
+    UpdateCardRequest:
+      allOf:
+        - $ref: '#/components/schemas/CreateCardRequest'
+        - type: object
+          properties:
+            status: { type: string, enum: [DRAFT, PUBLISHED, ARCHIVED] }
+
+    AuthorSummary:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        username: { type: string }
+
+    MediaSummary:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        cdnUrl: { type: string }
+        type: { type: string, enum: [PHOTO, VIDEO, THUMBNAIL] }
+
+    CardSummaryResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        speciesCommonName: { type: string }
+        speciesScientificName: { type: string }
+        locationName: { type: string }
+        isPremium: { type: boolean }
+        price: { type: number, format: double }
+        viewCount: { type: integer, format: int64 }
+        favoriteCount: { type: integer, format: int64 }
+        thumbnailMedia: { $ref: '#/components/schemas/MediaSummary' }
+        createdAt: { type: string, format: date-time }
+
+    CardDetailResponse:
+      allOf:
+        - $ref: '#/components/schemas/CardSummaryResponse'
+        - type: object
+          properties:
+            description: { type: string }
+            conservationStatus: { type: string }
+            latitude: { type: number, format: double }
+            longitude: { type: number, format: double }
+            status: { type: string, enum: [DRAFT, PUBLISHED, ARCHIVED] }
+            primaryMedia: { $ref: '#/components/schemas/MediaSummary' }
+            author: { $ref: '#/components/schemas/AuthorSummary' }
+            isFavorited: { type: boolean }
+            categories:
+              type: array
+              items: { $ref: '#/components/schemas/CategoryResponse' }
+            tags:
+              type: array
+              items: { $ref: '#/components/schemas/TagResponse' }
+            updatedAt: { type: string, format: date-time }
+
+    CreateCategoryRequest:
+      type: object
+      required: [name, slug]
+      properties:
+        name: { type: string }
+        slug: { type: string }
+        description: { type: string }
+        parentId: { type: string, format: uuid }
+
+    CategoryResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        description: { type: string }
+        parentId: { type: string, format: uuid }
+        subCategories:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryResponse'
+
+    CreateTagRequest:
+      type: object
+      required: [name, slug]
+      properties:
+        name: { type: string }
+        slug: { type: string }
+
+    TagResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
