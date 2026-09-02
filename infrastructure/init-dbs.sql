@@ -1,0 +1,2 @@
+CREATE DATABASE keycloak;
+CREATE DATABASE nature_db;
