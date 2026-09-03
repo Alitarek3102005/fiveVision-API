@@ -4,6 +4,9 @@ info:
   version: 1.1.0
   description: Handles media uploads, MinIO presigned URLs, and asset metadata.
 
+security:
+  - bearerAuth: []
+
 tags:
   - name: Media
     description: Media asset management
@@ -112,6 +115,12 @@ paths:
           description: Deleted
 
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
   schemas:
     PagedMediaResponse:
       type: object
@@ -146,11 +155,24 @@ components:
     CompleteUploadRequest:
       type: object
       properties:
-        resolutionWidth: { type: integer }
-        resolutionHeight: { type: integer }
-        durationSeconds: { type: integer }
-        cameraModel: { type: string }
-        lensInfo: { type: string }
+        resolutionWidth:
+          type: integer
+          minimum: 1
+          maximum: 16384
+        resolutionHeight:
+          type: integer
+          minimum: 1
+          maximum: 16384
+        durationSeconds:
+          type: integer
+          minimum: 0
+          maximum: 86400
+        cameraModel:
+          type: string
+          maxLength: 100
+        lensInfo:
+          type: string
+          maxLength: 100
 
     MediaAssetResponse:
       type: object
