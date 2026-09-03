@@ -101,7 +101,9 @@ CREATE TABLE event_publication (
                                    serialized_event VARCHAR(4000) NOT NULL,
                                    publication_date TIMESTAMP WITH TIME ZONE NOT NULL,
                                    completion_date TIMESTAMP WITH TIME ZONE,
-                                   completion_attempts INTEGER
+                                   completion_attempts INTEGER,
+                                   last_resubmission_date TIMESTAMP WITH TIME ZONE,
+                                   status VARCHAR(255) -- Add this column
 );
 
 CREATE INDEX event_publication_serialized_event_hash_idx ON event_publication (event_type, listener_id);
