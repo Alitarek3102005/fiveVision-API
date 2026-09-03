@@ -1,4 +1,4 @@
-package com.fivevision.api.media.internal.exception;
+package com.fivevision.api.common.exception;
 
 import java.util.UUID;
 
