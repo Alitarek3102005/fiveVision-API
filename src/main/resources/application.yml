@@ -38,6 +38,10 @@ storage:
   region: us-east-1
   bucket-name: 5vision-media
 
+clamav:
+  host: localhost
+  port: 3310
+
 logging:
   level:
     org.springframework.security: DEBUG
