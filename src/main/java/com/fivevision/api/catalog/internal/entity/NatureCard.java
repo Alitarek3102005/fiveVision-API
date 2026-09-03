@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.springframework.data.domain.Persistable;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
@@ -18,13 +19,12 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class NatureCard {
+public class NatureCard implements Persistable<UUID> {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
+    @Column(name = "id", nullable = false, updatable = false)
     private UUID id;
 
-    // Cross-Module References (Stored purely as UUIDs)
     @Column(name = "author_id")
     private UUID authorId;
 
@@ -76,7 +76,6 @@ public class NatureCard {
     @Builder.Default
     private Long favoriteCount = 0L;
 
-    // Many-to-Many Relationships
     @ManyToMany
     @JoinTable(
             name = "card_categories",
@@ -95,7 +94,6 @@ public class NatureCard {
     @Builder.Default
     private Set<Tag> tags = new HashSet<>();
 
-    // Timestamps
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private OffsetDateTime createdAt;
@@ -103,4 +101,13 @@ public class NatureCard {
     @UpdateTimestamp
     @Column(name = "updated_at")
     private OffsetDateTime updatedAt;
+
+    @Version
+    @Column(name = "version")
+    private Long version;
+
+    @Override
+    public boolean isNew() {
+        return version == null;
+    }
 }
