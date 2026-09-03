@@ -15,8 +15,8 @@ import java.util.UUID;
 public class FavoriteId implements Serializable {
 
     @Column(name = "user_id")
-    private UUID userId; // Reference to Identity module
+    private UUID userId;
 
     @Column(name = "card_id")
-    private UUID cardId; // Reference to the NatureCard
+    private UUID cardId;
 }

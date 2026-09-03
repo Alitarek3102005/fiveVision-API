@@ -10,6 +10,6 @@ import org.mapstruct.MappingConstants;
 public interface CategoryMapper {
 
     @Mapping(target = "parentId", source = "parent.id")
-    @Mapping(target = "subCategories", source = "children")
+    @Mapping(target = "subCategories", source = "subCategories")
     CategoryResponse toCategoryResponse(Category category);
 }

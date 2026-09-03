@@ -18,7 +18,7 @@ public class Favorite {
     private FavoriteId id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @MapsId("cardId") // Maps the card_id from the embeddable ID
+    @MapsId("cardId")
     @JoinColumn(name = "card_id")
     private NatureCard card;
 

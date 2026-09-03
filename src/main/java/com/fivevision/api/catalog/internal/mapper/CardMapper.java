@@ -21,7 +21,7 @@ public interface CardMapper {
     @Mapping(target = "primaryMedia", ignore = true)
     @Mapping(target = "thumbnailMedia", ignore = true)
     @Mapping(target = "author", ignore = true)
-    @Mapping(target = "isFavorited", constant = "false")
+    @Mapping(target = "isFavorited", ignore = true)
     CardDetailResponse toDetailResponse(NatureCard card);
 
     default PagedCardResponse toPagedResponse(Page<NatureCard> page) {

@@ -2,6 +2,8 @@ package com.fivevision.api.catalog.internal.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.springframework.data.domain.Persistable;
+
 import java.util.UUID;
 
 @Entity
@@ -11,10 +13,10 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class Tag {
+public class Tag implements Persistable<UUID> {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
+    @Column(name = "id", nullable = false, updatable = false)
     private UUID id;
 
     @Column(nullable = false, unique = true)
@@ -22,4 +24,13 @@ public class Tag {
 
     @Column(nullable = false)
     private String name;
+
+    @Version
+    @Column(name = "version")
+    private Long version;
+
+    @Override
+    public boolean isNew() {
+        return version == null;
+    }
 }
