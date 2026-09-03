@@ -23,20 +23,33 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class FavoriteService {
 
+    private static final int MAX_PAGE_SIZE = 100;
+
     private final FavoriteRepository favoriteRepository;
     private final CardRepository cardRepository;
     private final CardMapper cardMapper;
 
     @Transactional(readOnly = true)
     public PagedCardResponse getFavoriteCards(UUID userId, Integer page, Integer size) {
-        PageRequest pageRequest = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        int safePage = page != null ? page : 0;
+        int safeSize = size != null ? size : 20;
+        if (safePage < 0) {
+            throw new IllegalArgumentException("page must be >= 0");
+        }
+        if (safeSize < 1 || safeSize > MAX_PAGE_SIZE) {
+            throw new IllegalArgumentException("size must be between 1 and " + MAX_PAGE_SIZE);
+        }
+
+        PageRequest pageRequest = PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.DESC, "createdAt"));
         Page<NatureCard> favoritedCards = favoriteRepository.findFavoritedCardsByUserId(userId, pageRequest);
         return cardMapper.toPagedResponse(favoritedCards);
     }
 
     @Transactional
     public void favoriteCard(UUID cardId, UUID userId) {
-        if (favoriteRepository.existsByIdUserIdAndIdCardId(userId, cardId)) {
+        FavoriteId favoriteId = new FavoriteId(userId, cardId);
+
+        if (favoriteRepository.existsById(favoriteId)) {
             log.debug("User [{}] already favorited card [{}]", userId, cardId);
             return;
         }
@@ -45,7 +58,7 @@ public class FavoriteService {
                 .orElseThrow(() -> new ResourceNotFoundException("Card not found with ID: " + cardId));
 
         Favorite favorite = Favorite.builder()
-                .id(new FavoriteId(userId, cardId))
+                .id(favoriteId)
                 .card(card)
                 .build();
 
@@ -59,10 +72,10 @@ public class FavoriteService {
 
     @Transactional
     public void unfavoriteCard(UUID cardId, UUID userId) {
-        FavoriteId id = new FavoriteId(userId, cardId);
+        FavoriteId favoriteId = new FavoriteId(userId, cardId);
 
-        if (favoriteRepository.existsById(id)) {
-            favoriteRepository.deleteById(id);
+        if (favoriteRepository.existsById(favoriteId)) {
+            favoriteRepository.deleteById(favoriteId);
 
             NatureCard card = cardRepository.findById(cardId)
                     .orElseThrow(() -> new ResourceNotFoundException("Card not found with ID: " + cardId));

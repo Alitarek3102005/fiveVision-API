@@ -2,8 +2,8 @@ package com.fivevision.api.catalog.internal.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
-import java.util.ArrayList;
-import java.util.List;
+import org.springframework.data.domain.Persistable;
+
 import java.util.UUID;
 
 @Entity
@@ -13,10 +13,10 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class Category {
+public class Category implements Persistable<UUID> {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
+    @Column(name = "id", nullable = false, updatable = false)
     private UUID id;
 
     @Column(nullable = false)
@@ -33,5 +33,14 @@ public class Category {
 
     @OneToMany(mappedBy = "parent", cascade = CascadeType.ALL)
     @Builder.Default
-    private List<Category> subCategories = new ArrayList<>();
+    private java.util.List<Category> subCategories = new java.util.ArrayList<>();
+
+    @Version
+    @Column(name = "version")
+    private Long version;
+
+    @Override
+    public boolean isNew() {
+        return version == null;
+    }
 }
