@@ -10,6 +10,7 @@ import com.fivevision.api.identity.internal.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,6 +31,9 @@ public class UserServiceIntegrationTest extends AbstractIntegrationTest {
     @Autowired
     private UserRepository userRepository;
 
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
     @MockitoBean
     private SecurityUtils securityUtils;
 
@@ -37,6 +41,8 @@ public class UserServiceIntegrationTest extends AbstractIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        jdbcTemplate.execute("TRUNCATE TABLE users CASCADE");
+
         currentUserId = UUID.randomUUID();
         when(securityUtils.getCurrentUserId()).thenReturn(currentUserId);
     }

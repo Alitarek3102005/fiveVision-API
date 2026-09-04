@@ -51,6 +51,7 @@ public class TaxonomyService {
         }
 
         Category.CategoryBuilder builder = Category.builder()
+                .id(UUID.randomUUID())            // <-- add UUID generation
                 .name(request.getName().trim())
                 .slug(request.getSlug().trim())
                 .description(request.getDescription());
@@ -124,6 +125,7 @@ public class TaxonomyService {
         }
 
         Tag tag = Tag.builder()
+                .id(UUID.randomUUID())           // <-- add UUID generation
                 .name(request.getName().trim())
                 .slug(request.getSlug().trim())
                 .build();

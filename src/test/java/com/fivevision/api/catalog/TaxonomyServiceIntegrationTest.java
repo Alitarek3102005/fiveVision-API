@@ -36,16 +36,17 @@ public class TaxonomyServiceIntegrationTest extends AbstractIntegrationTest {
         tagRepository.deleteAll();
     }
 
-
     @Test
     void getCategories_TreeTrue_ReturnsOnlyTopLevel() {
         Category parent = Category.builder()
+                .id(UUID.randomUUID())
                 .name("Parent")
                 .slug("parent")
                 .build();
         categoryRepository.save(parent);
 
         Category child = Category.builder()
+                .id(UUID.randomUUID())
                 .name("Child")
                 .slug("child")
                 .parent(parent)
@@ -62,12 +63,14 @@ public class TaxonomyServiceIntegrationTest extends AbstractIntegrationTest {
     @Test
     void getCategories_TreeFalse_ReturnsAll() {
         Category parent = Category.builder()
+                .id(UUID.randomUUID())
                 .name("Parent")
                 .slug("parent")
                 .build();
         categoryRepository.save(parent);
 
         Category child = Category.builder()
+                .id(UUID.randomUUID())
                 .name("Child")
                 .slug("child")
                 .parent(parent)
@@ -96,6 +99,7 @@ public class TaxonomyServiceIntegrationTest extends AbstractIntegrationTest {
     @Test
     void createCategory_DuplicateSlugThrows() {
         Category existing = Category.builder()
+                .id(UUID.randomUUID())
                 .name("Existing")
                 .slug("birds")
                 .build();
@@ -124,6 +128,7 @@ public class TaxonomyServiceIntegrationTest extends AbstractIntegrationTest {
     @Test
     void createCategory_WithParent_SetsParent() {
         Category parent = Category.builder()
+                .id(UUID.randomUUID())
                 .name("Parent")
                 .slug("parent")
                 .build();
@@ -142,6 +147,7 @@ public class TaxonomyServiceIntegrationTest extends AbstractIntegrationTest {
     @Test
     void updateCategory_Success() {
         Category existing = Category.builder()
+                .id(UUID.randomUUID())
                 .name("Old Name")
                 .slug("old-slug")
                 .build();
@@ -160,8 +166,16 @@ public class TaxonomyServiceIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void updateCategory_DuplicateSlugThrows() {
-        Category existing1 = Category.builder().name("One").slug("one").build();
-        Category existing2 = Category.builder().name("Two").slug("two").build();
+        Category existing1 = Category.builder()
+                .id(UUID.randomUUID())
+                .name("One")
+                .slug("one")
+                .build();
+        Category existing2 = Category.builder()
+                .id(UUID.randomUUID())
+                .name("Two")
+                .slug("two")
+                .build();
         categoryRepository.saveAll(List.of(existing1, existing2));
 
         CreateCategoryRequest request = new CreateCategoryRequest()
@@ -174,7 +188,11 @@ public class TaxonomyServiceIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void updateCategory_SelfParentThrows() {
-        Category existing = Category.builder().name("Self").slug("self").build();
+        Category existing = Category.builder()
+                .id(UUID.randomUUID())
+                .name("Self")
+                .slug("self")
+                .build();
         categoryRepository.save(existing);
 
         CreateCategoryRequest request = new CreateCategoryRequest()
@@ -189,7 +207,11 @@ public class TaxonomyServiceIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void deleteCategory_Success() {
-        Category existing = Category.builder().name("ToDelete").slug("to-delete").build();
+        Category existing = Category.builder()
+                .id(UUID.randomUUID())
+                .name("ToDelete")
+                .slug("to-delete")
+                .build();
         categoryRepository.save(existing);
 
         taxonomyService.deleteCategory(existing.getId());
@@ -205,11 +227,18 @@ public class TaxonomyServiceIntegrationTest extends AbstractIntegrationTest {
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
-
     @Test
     void getTags_ReturnsAllTags() {
-        Tag tag1 = Tag.builder().name("Rare").slug("rare").build();
-        Tag tag2 = Tag.builder().name("Common").slug("common").build();
+        Tag tag1 = Tag.builder()
+                .id(UUID.randomUUID())
+                .name("Rare")
+                .slug("rare")
+                .build();
+        Tag tag2 = Tag.builder()
+                .id(UUID.randomUUID())
+                .name("Common")
+                .slug("common")
+                .build();
         tagRepository.saveAll(List.of(tag1, tag2));
 
         List<TagResponse> result = taxonomyService.getTags();
@@ -233,7 +262,11 @@ public class TaxonomyServiceIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void createTag_DuplicateSlugThrows() {
-        Tag existing = Tag.builder().name("Existing").slug("rare").build();
+        Tag existing = Tag.builder()
+                .id(UUID.randomUUID())
+                .name("Existing")
+                .slug("rare")
+                .build();
         tagRepository.save(existing);
 
         CreateTagRequest request = new CreateTagRequest()
@@ -258,7 +291,11 @@ public class TaxonomyServiceIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void updateTag_Success() {
-        Tag existing = Tag.builder().name("Old").slug("old").build();
+        Tag existing = Tag.builder()
+                .id(UUID.randomUUID())
+                .name("Old")
+                .slug("old")
+                .build();
         tagRepository.save(existing);
 
         CreateTagRequest request = new CreateTagRequest()
@@ -273,8 +310,16 @@ public class TaxonomyServiceIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void updateTag_DuplicateSlugThrows() {
-        Tag tag1 = Tag.builder().name("One").slug("one").build();
-        Tag tag2 = Tag.builder().name("Two").slug("two").build();
+        Tag tag1 = Tag.builder()
+                .id(UUID.randomUUID())
+                .name("One")
+                .slug("one")
+                .build();
+        Tag tag2 = Tag.builder()
+                .id(UUID.randomUUID())
+                .name("Two")
+                .slug("two")
+                .build();
         tagRepository.saveAll(List.of(tag1, tag2));
 
         CreateTagRequest request = new CreateTagRequest()
@@ -287,7 +332,11 @@ public class TaxonomyServiceIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void deleteTag_Success() {
-        Tag existing = Tag.builder().name("Delete Me").slug("delete-me").build();
+        Tag existing = Tag.builder()
+                .id(UUID.randomUUID())
+                .name("Delete Me")
+                .slug("delete-me")
+                .build();
         tagRepository.save(existing);
 
         taxonomyService.deleteTag(existing.getId());
