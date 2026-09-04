@@ -32,7 +32,7 @@ paths:
           schema: { type: string, enum: [PHOTO, VIDEO, THUMBNAIL] }
         - name: status
           in: query
-          schema: { type: string, enum: [PROCESSING, READY, FAILED] }
+          schema: { type: string, enum: [PROCESSING, SCANNING, READY, FAILED] }
       responses:
         '200':
           description: Paginated media assets
@@ -63,7 +63,7 @@ paths:
   /api/v1/media/{id}/complete:
     post:
       tags: [Media]
-      summary: Confirm upload completion and save technical metadata
+      summary: Confirm upload completion and save technical metadata; triggers malware scan
       operationId: completeUpload
       parameters:
         - name: id
@@ -78,7 +78,7 @@ paths:
               $ref: '#/components/schemas/CompleteUploadRequest'
       responses:
         '200':
-          description: Upload marked as READY
+          description: Upload accepted and scheduled for malware scanning
           content:
             application/json:
               schema:
@@ -180,7 +180,7 @@ components:
         id: { type: string, format: uuid }
         uploaderId: { type: string, format: uuid }
         type: { type: string, enum: [PHOTO, VIDEO, THUMBNAIL] }
-        status: { type: string, enum: [PROCESSING, READY, FAILED] }
+        status: { type: string, enum: [PROCESSING, SCANNING, READY, FAILED] }
         cdnUrl: { type: string, format: uri }
         fileSizeBytes: { type: integer, format: int64 }
         mimeType: { type: string }

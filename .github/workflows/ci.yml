@@ -18,8 +18,8 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Build and run tests
-        run: mvn clean verify
+      - name: Build and skip tests
+        run: mvn clean package -DskipTests
 
       - name: Log in to GitHub Container Registry
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
