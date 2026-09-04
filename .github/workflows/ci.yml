@@ -2,6 +2,10 @@ name: CI/CD Pipeline
 
 on: [push, pull_request]
 
+permissions:
+  contents: read
+  packages: write
+
 env:
   IMAGE_NAME: ghcr.io/alitarek3102005/fivevision-api   # lowercase owner
 
