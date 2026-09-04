@@ -3,7 +3,7 @@ name: CI/CD Pipeline
 on: [push, pull_request]
 
 env:
-  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/fivevision-api
+  IMAGE_NAME: ghcr.io/alitarek3102005/fivevision-api   # lowercase owner
 
 jobs:
   build-and-test:
@@ -18,8 +18,13 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Build and skip tests
-        run: mvn clean package -DskipTests
+      - name: Verify Docker availability
+        run: until docker info >/dev/null 2>&1; do echo "Waiting for Docker..."; sleep 1; done
+
+      - name: Build and run tests
+        env:
+          TESTCONTAINERS_RYUK_DISABLED: "true"
+        run: mvn clean verify
 
       - name: Log in to GitHub Container Registry
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
