@@ -1,20 +1,20 @@
 server:
-  port: 8081
+  port: ${SERVER_PORT:8081}
 
 spring:
   application:
     name: 5vision-api
 
   datasource:
-    url: jdbc:postgresql://localhost:5433/nature_db
-    username: admin
-    password: password
+    url: ${DB_URL:jdbc:postgresql://localhost:5433/nature_db}
+    username: ${DB_USERNAME:admin}
+    password: ${DB_PASSWORD:password}
     driver-class-name: org.postgresql.Driver
 
   jpa:
     hibernate:
       ddl-auto: validate
-    show-sql: true
+    show-sql: ${JPA_SHOW_SQL:true}
     properties:
       hibernate:
         format_sql: true
@@ -29,20 +29,20 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: http://localhost:8080/realms/5vision
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8080/realms/5vision}
 
 storage:
-  endpoint-url: http://localhost:9000
-  access-key: minioadmin
-  secret-key: minioadmin
-  region: us-east-1
-  bucket-name: 5vision-media
+  endpoint-url: ${MINIO_ENDPOINT:http://localhost:9000}
+  access-key: ${MINIO_ACCESS_KEY:minioadmin}
+  secret-key: ${MINIO_SECRET_KEY:minioadmin}
+  region: ${MINIO_REGION:us-east-1}
+  bucket-name: ${MINIO_BUCKET_NAME:5vision-media}
 
 clamav:
-  host: localhost
-  port: 3310
+  host: ${CLAMAV_HOST:localhost}
+  port: ${CLAMAV_PORT:3310}
 
 logging:
   level:
-    org.springframework.security: DEBUG
+    org.springframework.security: ${SECURITY_LOG_LEVEL:DEBUG}
     org.springframework.modulith: INFO
