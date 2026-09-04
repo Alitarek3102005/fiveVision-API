@@ -27,6 +27,16 @@ public class ClamAvScanService {
         this.clamAvPort = clamAvPort;
     }
 
+    public boolean ping() {
+        try {
+            ClamAVClient client = new ClamAVClient(clamAvHost, clamAvPort);
+            return client.ping();
+        } catch (Exception e) {
+            log.warn("ClamAV ping failed: {}", e.getMessage());
+            return false;
+        }
+    }
+
 
     public boolean scanObject(String bucketName, String fileKey) throws Exception {
         log.info("Scanning S3 object {}/{}", bucketName, fileKey);

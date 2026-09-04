@@ -1,6 +1,7 @@
 package com.fivevision.api.media;
 
 import com.fivevision.api.AbstractIntegrationTest;
+import com.fivevision.api.catalog.internal.listener.MediaEventListener;
 import com.fivevision.api.common.exception.ForbiddenAccessException;
 import com.fivevision.api.common.security.SecurityUtils;
 import com.fivevision.api.identity.internal.entity.User;
@@ -9,12 +10,15 @@ import com.fivevision.api.media.internal.dto.*;
 import com.fivevision.api.media.internal.entity.*;
 import com.fivevision.api.common.exception.InvalidUploadException;
 import com.fivevision.api.common.exception.MediaNotFoundException;
+import com.fivevision.api.media.internal.event.MediaAssetDeletedEvent;
+import com.fivevision.api.media.internal.event.MediaUploadCompletedEvent;
+import com.fivevision.api.media.internal.listener.MediaScanListener;
 import com.fivevision.api.media.internal.repository.MediaAssetRepository;
+import com.fivevision.api.media.internal.service.ClamAvScanService;
 import com.fivevision.api.media.internal.service.MediaService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
@@ -32,6 +36,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 public class MediaServiceIntegrationTest extends AbstractIntegrationTest {
@@ -55,12 +60,18 @@ public class MediaServiceIntegrationTest extends AbstractIntegrationTest {
     private SecurityUtils securityUtils;
 
     @MockitoBean
-    private ApplicationEventPublisher eventPublisher;
+    private ClamAvScanService clamAvScanService;
+
+    @MockitoBean
+    private MediaScanListener mediaScanListener;   // mock to prevent scan listener side effects
+
+    @MockitoBean
+    private MediaEventListener mediaEventListener; // mock to prevent catalog listener side effects
 
     private UUID uploaderId;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws Exception {
         repository.deleteAllInBatch();
         userRepository.deleteAllInBatch();
 
@@ -76,7 +87,12 @@ public class MediaServiceIntegrationTest extends AbstractIntegrationTest {
         when(securityUtils.hasRole(anyString())).thenReturn(true);
         when(securityUtils.isOwnerOrAdmin(any(UUID.class))).thenReturn(true);
         when(securityUtils.getCurrentUserId()).thenReturn(uploaderId);
+
+        // Stub ClamAV scan to return true (not strictly needed because listener won't run)
+        when(clamAvScanService.scanObject(anyString(), anyString())).thenReturn(true);
     }
+
+    // ---------- listMedia ----------
 
     @Test
     void listMedia_ReturnsOnlyActiveAssets() {
@@ -102,6 +118,8 @@ public class MediaServiceIntegrationTest extends AbstractIntegrationTest {
         assertThatThrownBy(() -> mediaService.listMedia(0, 20, "createdAt,desc", null, null))
                 .isInstanceOf(ForbiddenAccessException.class);
     }
+
+    // ---------- initiateUpload ----------
 
     @Test
     void initiateUpload_Success() throws MalformedURLException {
@@ -134,6 +152,8 @@ public class MediaServiceIntegrationTest extends AbstractIntegrationTest {
                 .isInstanceOf(InvalidUploadException.class);
     }
 
+    // ---------- completeUpload ----------
+
     @Test
     void completeUpload_Success() {
         MediaAsset asset = createMediaAsset(UUID.randomUUID(), MediaStatus.PROCESSING, false);
@@ -153,9 +173,14 @@ public class MediaServiceIntegrationTest extends AbstractIntegrationTest {
 
         MediaAssetResponse response = mediaService.completeUpload(asset.getId(), request);
 
-        assertThat(response.getStatus()).isEqualTo(MediaAssetResponse.StatusEnum.READY);
+        assertThat(response.getStatus()).isEqualTo(MediaAssetResponse.StatusEnum.SCANNING);
         assertThat(response.getResolutionWidth()).isEqualTo(1920);
-        assertThat(repository.findById(asset.getId()).orElseThrow().getStatus()).isEqualTo(MediaStatus.READY);
+
+        MediaAsset saved = repository.findById(asset.getId()).orElseThrow();
+        assertThat(saved.getStatus()).isEqualTo(MediaStatus.SCANNING);
+
+        // Verify the mock listener received the event
+        verify(mediaScanListener, times(1)).onMediaUploadCompleted(any(MediaUploadCompletedEvent.class));
     }
 
     @Test
@@ -187,6 +212,8 @@ public class MediaServiceIntegrationTest extends AbstractIntegrationTest {
                 .isInstanceOf(InvalidUploadException.class);
     }
 
+    // ---------- getById ----------
+
     @Test
     void getById_ReturnsActiveAsset() {
         MediaAsset asset = createMediaAsset(UUID.randomUUID(), MediaStatus.READY, false);
@@ -207,6 +234,8 @@ public class MediaServiceIntegrationTest extends AbstractIntegrationTest {
                 .isInstanceOf(MediaNotFoundException.class);
     }
 
+    // ---------- delete ----------
+
     @Test
     void delete_SoftDeletesAssetAndPublishesEvent() {
         MediaAsset asset = createMediaAsset(UUID.randomUUID(), MediaStatus.READY, false);
@@ -217,6 +246,9 @@ public class MediaServiceIntegrationTest extends AbstractIntegrationTest {
         MediaAsset saved = repository.findById(asset.getId()).orElseThrow();
         assertThat(saved.getDeletedAt()).isNotNull();
         assertThat(saved.getDeletedBy()).isEqualTo(uploaderId);
+
+        // Verify the catalog listener received the event
+        verify(mediaEventListener, times(1)).onMediaDeleted(any(MediaAssetDeletedEvent.class));
     }
 
     @Test
