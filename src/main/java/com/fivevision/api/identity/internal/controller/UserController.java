@@ -27,6 +27,21 @@ public class UserController implements UsersApi {
         return ResponseEntity.ok(userService.listUsers(safePage, safeSize, safeSort, search));
     }
 
+
+    @Override
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<UserProfileResponse> adminUpdateUser(UUID id, @Valid AdminUpdateUserRequest adminUpdateUserRequest) {
+        return ResponseEntity.ok(userService.adminUpdateUser(id, adminUpdateUserRequest));
+    }
+
+    @Override
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Void> deleteUser(UUID id) {
+        userService.deleteUser(id);
+        return ResponseEntity.noContent().build();
+    }
+
+
     @Override
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<UserProfileResponse> getCurrentUser() {

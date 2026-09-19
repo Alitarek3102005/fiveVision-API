@@ -2,6 +2,7 @@ package com.fivevision.api.identity.internal.service;
 
 import com.fivevision.api.common.exception.ResourceNotFoundException;
 import com.fivevision.api.common.security.SecurityUtils;
+import com.fivevision.api.identity.internal.dto.AdminUpdateUserRequest;
 import com.fivevision.api.identity.internal.dto.PagedUserResponse;
 import com.fivevision.api.identity.internal.dto.UpdateProfileRequest;
 import com.fivevision.api.identity.internal.dto.UserProfileResponse;
@@ -35,6 +36,7 @@ public class UserServiceImpl implements UserService {
     private final UserRepository userRepository;
     private final UserMapper userMapper;
     private final SecurityUtils securityUtils;
+    private final KeycloakRoleSync keycloakRoleSync;
 
     @Override
     @Transactional(readOnly = true)
@@ -106,6 +108,8 @@ public class UserServiceImpl implements UserService {
         String lastName = securityUtils.getCurrentLastName();
         String role = derivePrimaryRole(securityUtils.getCurrentRoles());
 
+        boolean isNewUser = !userRepository.existsById(userId);
+
         User user = userRepository.findById(userId)
                 .orElse(User.builder().id(userId).build());
 
@@ -113,8 +117,18 @@ public class UserServiceImpl implements UserService {
         if (email != null) user.setEmail(email);
         if (firstName != null) user.setFirstName(firstName);
         if (lastName != null) user.setLastName(lastName);
-        user.setRole(role);
         user.setLastLogin(OffsetDateTime.now());
+        user.setRole(role);
+
+        if (isNewUser) {
+            try {
+                keycloakRoleSync.assignRealmRole(userId, role);
+                log.info("New user {} synced and assigned {} role explicitly in Keycloak", userId, role);
+            } catch (Exception e) {
+                log.warn("New user {} created locally but failed to sync {} role to Keycloak: {}",
+                        userId, role, e.getMessage());
+            }
+        }
 
         user = userRepository.save(user);
         log.info("User {} synchronized from Keycloak", userId);
@@ -128,6 +142,49 @@ public class UserServiceImpl implements UserService {
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         return userMapper.toSummaryResponse(user);
     }
+
+
+    @Override
+    @Transactional
+    public UserProfileResponse adminUpdateUser(UUID id, AdminUpdateUserRequest request) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + id));
+
+        if (request.getFirstName() != null && !request.getFirstName().isBlank()) {
+            user.setFirstName(request.getFirstName().trim());
+        }
+        if (request.getLastName() != null && !request.getLastName().isBlank()) {
+            user.setLastName(request.getLastName().trim());
+        }
+
+        if (request.getRole() != null) {
+            String newRole = request.getRole().name();
+            if (!newRole.equals(user.getRole())) {
+                keycloakRoleSync.swapRealmRole(user.getId(), user.getRole(), newRole);
+                log.info("Admin swapped role for user [{}] from {} to {}", id, user.getRole(), newRole);
+                user.setRole(newRole);
+            }
+        }
+
+        if (request.getIsActive() != null) {
+            user.setIsActive(request.getIsActive());
+        }
+
+        user = userRepository.save(user);
+        log.info("Admin updated profile and permissions for user [{}]", id);
+        return userMapper.toProfileResponse(user);
+    }
+
+    @Override
+    @Transactional
+    public void deleteUser(UUID id) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + id));
+
+        userRepository.delete(user);
+        log.info("Admin permanently deleted user [{}]", id);
+    }
+
 
     private String derivePrimaryRole(Set<String> roles) {
         if (roles.contains("ADMIN")) return "ADMIN";

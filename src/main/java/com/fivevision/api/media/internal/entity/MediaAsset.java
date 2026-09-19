@@ -7,7 +7,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.SQLRestriction;
 import org.springframework.data.domain.Persistable;
 
 import java.time.OffsetDateTime;
@@ -15,7 +14,6 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "media_assets")
-//@SQLRestriction("deleted_at IS NULL")
 @Getter
 @Setter
 @NoArgsConstructor
@@ -45,13 +43,27 @@ public class MediaAsset implements Persistable<UUID> {
     @Column(name = "file_key", length = 512, nullable = false)
     private String fileKey;
 
-    @Column(name = "cdn_url", length = 512, nullable = false)
+    @Column(name = "cdn_url", length = 1024, nullable = false)
     private String cdnUrl;
+
+    // ---- NEW: image variants ----
+    @Column(name = "thumbnail_key", length = 512)
+    private String thumbnailKey;
+
+    @Column(name = "thumbnail_url", length = 1024)
+    private String thumbnailUrl;
+
+    @Column(name = "large_key", length = 512)
+    private String largeKey;
+
+    @Column(name = "large_url", length = 1024)
+    private String largeUrl;
+    // -----------------------------
 
     @Column(name = "file_size_bytes")
     private Long fileSizeBytes;
 
-    @Column(name = "mime_type", length = 50)
+    @Column(name = "mime_type", length = 100)
     private String mimeType;
 
     @Column(name = "resolution_width")

@@ -13,13 +13,16 @@ import java.net.URISyntaxException;
 @Mapper(componentModel = "spring", unmappedTargetPolicy = ReportingPolicy.IGNORE)
 public interface MediaAssetMapper {
 
-    @Mapping(target = "cdnUrl", expression = "java(entity.getStatus() == MediaStatus.READY ? toUri(entity.getCdnUrl()) : null)")
+    @Mapping(target = "cdnUrl",
+            expression = "java(entity.getStatus() == MediaStatus.READY ? toUri(entity.getCdnUrl()) : null)")
+    @Mapping(target = "thumbnailUrl",
+            expression = "java(entity.getStatus() == MediaStatus.READY ? toUri(entity.getThumbnailUrl()) : null)")
+    @Mapping(target = "largeUrl",
+            expression = "java(entity.getStatus() == MediaStatus.READY ? toUri(entity.getLargeUrl()) : null)")
     MediaAssetResponse toResponse(MediaAsset entity);
 
     default URI toUri(String value) {
-        if (value == null) {
-            return null;
-        }
+        if (value == null) return null;
         try {
             return new URI(value);
         } catch (URISyntaxException e) {

@@ -17,4 +17,5 @@ public interface FavoriteRepository extends JpaRepository<Favorite, FavoriteId> 
 
     @Query("SELECT f.card FROM Favorite f WHERE f.id.userId = :userId")
     Page<NatureCard> findFavoritedCardsByUserId(@Param("userId") UUID userId, Pageable pageable);
+    void deleteAllByIdCardId(UUID cardId);
 }

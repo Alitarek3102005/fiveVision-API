@@ -37,6 +37,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    volumes:
+      - ./keycloak-themes/5vision:/opt/keycloak/themes/5vision
 
   minio:
     image: quay.io/minio/minio:RELEASE.2024-03-07T00-43-48Z
@@ -46,6 +48,7 @@ services:
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_API_CORS_ALLOW_ORIGIN: http://localhost:4200
     ports:
       - "9000:9000"
       - "9001:9001"

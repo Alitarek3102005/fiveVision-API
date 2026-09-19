@@ -1,6 +1,6 @@
 package com.fivevision.api.identity.internal.service;
 
-
+import com.fivevision.api.identity.internal.dto.AdminUpdateUserRequest;
 import com.fivevision.api.identity.internal.dto.PagedUserResponse;
 import com.fivevision.api.identity.internal.dto.UpdateProfileRequest;
 import com.fivevision.api.identity.internal.dto.UserProfileResponse;
@@ -19,4 +19,9 @@ public interface UserService {
     UserProfileResponse syncUser();
 
     UserSummaryResponse getUserSummary(UUID id);
+
+
+    UserProfileResponse adminUpdateUser(UUID id, AdminUpdateUserRequest request);
+
+    void deleteUser(UUID id);
 }

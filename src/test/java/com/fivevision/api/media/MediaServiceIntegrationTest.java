@@ -15,12 +15,17 @@ import com.fivevision.api.media.internal.event.MediaUploadCompletedEvent;
 import com.fivevision.api.media.internal.listener.MediaScanListener;
 import com.fivevision.api.media.internal.repository.MediaAssetRepository;
 import com.fivevision.api.media.internal.service.ClamAvScanService;
+import com.fivevision.api.media.internal.service.ImageProcessingService;
 import com.fivevision.api.media.internal.service.MediaService;
+import com.fivevision.api.media.internal.service.VideoProcessingService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.event.ApplicationEvents;
+import org.springframework.test.context.event.RecordApplicationEvents;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
@@ -31,6 +36,7 @@ import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignReques
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.time.OffsetDateTime;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -39,34 +45,23 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
+@RecordApplicationEvents
 public class MediaServiceIntegrationTest extends AbstractIntegrationTest {
 
-    @Autowired
-    private MediaService mediaService;
+    @Autowired private MediaService mediaService;
+    @Autowired private MediaAssetRepository repository;
+    @Autowired private UserRepository userRepository;
 
-    @Autowired
-    private MediaAssetRepository repository;
+    @Autowired private ApplicationEvents applicationEvents;
 
-    @Autowired
-    private UserRepository userRepository;
-
-    @MockitoBean
-    private S3Client s3Client;
-
-    @MockitoBean
-    private S3Presigner s3Presigner;
-
-    @MockitoBean
-    private SecurityUtils securityUtils;
-
-    @MockitoBean
-    private ClamAvScanService clamAvScanService;
-
-    @MockitoBean
-    private MediaScanListener mediaScanListener;   // mock to prevent scan listener side effects
-
-    @MockitoBean
-    private MediaEventListener mediaEventListener; // mock to prevent catalog listener side effects
+    @MockitoBean private S3Client s3Client;
+    @MockitoBean private S3Presigner s3Presigner;
+    @MockitoBean private SecurityUtils securityUtils;
+    @MockitoBean private ClamAvScanService clamAvScanService;
+    @MockitoBean private ImageProcessingService imageProcessingService;
+    @MockitoBean private VideoProcessingService videoProcessingService;
+    @MockitoBean private MediaScanListener mediaScanListener;
+    @MockitoBean private MediaEventListener mediaEventListener;
 
     private UUID uploaderId;
 
@@ -76,23 +71,16 @@ public class MediaServiceIntegrationTest extends AbstractIntegrationTest {
         userRepository.deleteAllInBatch();
 
         uploaderId = UUID.randomUUID();
-
-        userRepository.save(User.builder()
-                .id(uploaderId)
-                .username("testuser-" + uploaderId)
-                .email("test-" + uploaderId + "@example.com")
-                .build());
+        insertUser(uploaderId);
 
         when(securityUtils.isAdmin()).thenReturn(true);
         when(securityUtils.hasRole(anyString())).thenReturn(true);
         when(securityUtils.isOwnerOrAdmin(any(UUID.class))).thenReturn(true);
         when(securityUtils.getCurrentUserId()).thenReturn(uploaderId);
 
-        // Stub ClamAV scan to return true (not strictly needed because listener won't run)
         when(clamAvScanService.scanObject(anyString(), anyString())).thenReturn(true);
     }
 
-    // ---------- listMedia ----------
 
     @Test
     void listMedia_ReturnsOnlyActiveAssets() {
@@ -118,8 +106,6 @@ public class MediaServiceIntegrationTest extends AbstractIntegrationTest {
         assertThatThrownBy(() -> mediaService.listMedia(0, 20, "createdAt,desc", null, null))
                 .isInstanceOf(ForbiddenAccessException.class);
     }
-
-    // ---------- initiateUpload ----------
 
     @Test
     void initiateUpload_Success() throws MalformedURLException {
@@ -152,7 +138,25 @@ public class MediaServiceIntegrationTest extends AbstractIntegrationTest {
                 .isInstanceOf(InvalidUploadException.class);
     }
 
-    // ---------- completeUpload ----------
+    @Test
+    void initiateUpload_VideoMp4_Success() throws MalformedURLException {
+        InitiateUploadRequest request = new InitiateUploadRequest()
+                .fileName("clip.mp4")
+                .mimeType("video/mp4")
+                .sizeBytes(5_000_000L)
+                .type(InitiateUploadRequest.TypeEnum.VIDEO);
+
+        PresignedPutObjectRequest presigned = mock(PresignedPutObjectRequest.class);
+        when(presigned.url()).thenReturn(URI.create("http://minio.example.com/upload").toURL());
+        when(s3Presigner.presignPutObject(any(PutObjectPresignRequest.class))).thenReturn(presigned);
+
+        InitiateUploadResponse response = mediaService.initiateUpload(request, uploaderId);
+
+        MediaAsset saved = repository.findById(response.getMediaId()).orElseThrow();
+        assertThat(saved.getType()).isEqualTo(MediaType.VIDEO);
+        assertThat(saved.getMimeType()).isEqualTo("video/mp4");
+    }
+
 
     @Test
     void completeUpload_Success() {
@@ -179,8 +183,34 @@ public class MediaServiceIntegrationTest extends AbstractIntegrationTest {
         MediaAsset saved = repository.findById(asset.getId()).orElseThrow();
         assertThat(saved.getStatus()).isEqualTo(MediaStatus.SCANNING);
 
-        // Verify the mock listener received the event
-        verify(mediaScanListener, times(1)).onMediaUploadCompleted(any(MediaUploadCompletedEvent.class));
+        assertThat(applicationEvents.stream(MediaUploadCompletedEvent.class).count()).isEqualTo(1);
+    }
+
+    @Test
+    void completeUpload_SavesDurationSeconds() {
+        MediaAsset asset = createMediaAsset(UUID.randomUUID(), MediaStatus.PROCESSING, false);
+        asset.setType(MediaType.VIDEO);
+        asset.setMimeType("video/mp4");
+        asset.setFileKey("media/" + asset.getId() + "/clip.mp4");
+        repository.save(asset);
+
+        HeadObjectResponse headResponse = HeadObjectResponse.builder()
+                .contentLength(1000L)
+                .contentType("video/mp4")
+                .build();
+        when(s3Client.headObject(any(HeadObjectRequest.class))).thenReturn(headResponse);
+
+        CompleteUploadRequest request = new CompleteUploadRequest()
+                .resolutionWidth(1920)
+                .resolutionHeight(1080)
+                .durationSeconds(14);
+
+        mediaService.completeUpload(asset.getId(), request);
+
+        MediaAsset saved = repository.findById(asset.getId()).orElseThrow();
+        assertThat(saved.getDurationSeconds()).isEqualTo(14);
+        assertThat(saved.getResolutionWidth()).isEqualTo(1920);
+        assertThat(saved.getResolutionHeight()).isEqualTo(1080);
     }
 
     @Test
@@ -212,7 +242,6 @@ public class MediaServiceIntegrationTest extends AbstractIntegrationTest {
                 .isInstanceOf(InvalidUploadException.class);
     }
 
-    // ---------- getById ----------
 
     @Test
     void getById_ReturnsActiveAsset() {
@@ -234,8 +263,6 @@ public class MediaServiceIntegrationTest extends AbstractIntegrationTest {
                 .isInstanceOf(MediaNotFoundException.class);
     }
 
-    // ---------- delete ----------
-
     @Test
     void delete_SoftDeletesAssetAndPublishesEvent() {
         MediaAsset asset = createMediaAsset(UUID.randomUUID(), MediaStatus.READY, false);
@@ -247,8 +274,29 @@ public class MediaServiceIntegrationTest extends AbstractIntegrationTest {
         assertThat(saved.getDeletedAt()).isNotNull();
         assertThat(saved.getDeletedBy()).isEqualTo(uploaderId);
 
-        // Verify the catalog listener received the event
-        verify(mediaEventListener, times(1)).onMediaDeleted(any(MediaAssetDeletedEvent.class));
+        assertThat(applicationEvents.stream(MediaAssetDeletedEvent.class).count()).isEqualTo(1);
+    }
+
+    @Test
+    void delete_WithVariants_DeletesAllThreeKeysFromS3() {
+        MediaAsset asset = createMediaAsset(UUID.randomUUID(), MediaStatus.READY, false);
+        asset.setThumbnailKey("media/" + asset.getId() + "/thumb/test.jpg");
+        asset.setLargeKey("media/" + asset.getId() + "/large/test.jpg");
+        repository.save(asset);
+
+        mediaService.delete(asset.getId());
+
+        verify(s3Client, times(3)).deleteObject(any(DeleteObjectRequest.class));
+    }
+
+    @Test
+    void delete_WithoutVariants_DeletesOnlyOriginal() {
+        MediaAsset asset = createMediaAsset(UUID.randomUUID(), MediaStatus.READY, false);
+        repository.save(asset);
+
+        mediaService.delete(asset.getId());
+
+        verify(s3Client, times(1)).deleteObject(any(DeleteObjectRequest.class));
     }
 
     @Test
@@ -260,6 +308,128 @@ public class MediaServiceIntegrationTest extends AbstractIntegrationTest {
 
         assertThatThrownBy(() -> mediaService.delete(asset.getId()))
                 .isInstanceOf(MediaNotFoundException.class);
+    }
+
+
+    @Test
+    void bulkDelete_AllAssetsDeletedSuccessfully() {
+        MediaAsset a = createMediaAsset(UUID.randomUUID(), MediaStatus.READY, false);
+        a.setThumbnailKey("media/" + a.getId() + "/thumb/test.jpg");
+        a.setLargeKey("media/" + a.getId() + "/large/test.jpg");
+        repository.save(a);
+
+        MediaAsset b = createMediaAsset(UUID.randomUUID(), MediaStatus.READY, false);
+        b.setThumbnailKey("media/" + b.getId() + "/thumb/test.jpg");
+        b.setLargeKey("media/" + b.getId() + "/large/test.jpg");
+        repository.save(b);
+
+        BulkDeleteMediaResponse response =
+                mediaService.bulkDelete(Set.of(a.getId(), b.getId()), uploaderId);
+
+        assertThat(response.getDeleted()).isEqualTo(2);
+        assertThat(response.getFailed()).isZero();
+        assertThat(response.getErrors()).isEmpty();
+        assertThat(response.getDeletedIds())
+                .containsExactlyInAnyOrder(a.getId(), b.getId());
+
+        assertThat(repository.findById(a.getId()).orElseThrow().getDeletedAt()).isNotNull();
+        assertThat(repository.findById(b.getId()).orElseThrow().getDeletedAt()).isNotNull();
+
+        verify(s3Client, times(6)).deleteObject(any(DeleteObjectRequest.class));
+    }
+
+    @Test
+    void bulkDelete_PartialWithMissingId_ReportsPerItemError() {
+        MediaAsset a = createMediaAsset(UUID.randomUUID(), MediaStatus.READY, false);
+        repository.save(a);
+
+        UUID missing = UUID.randomUUID();
+
+        BulkDeleteMediaResponse response =
+                mediaService.bulkDelete(Set.of(a.getId(), missing), uploaderId);
+
+        assertThat(response.getDeleted()).isEqualTo(1);
+        assertThat(response.getFailed()).isEqualTo(1);
+        assertThat(response.getDeletedIds()).containsExactly(a.getId());
+        assertThat(response.getErrors()).hasSize(1);
+        assertThat(response.getErrors().get(0).getId()).isEqualTo(missing);
+        assertThat(response.getErrors().get(0).getError()).containsIgnoringCase("not found");
+    }
+
+    @Test
+    void bulkDelete_WithoutPermission_ReportsPerItemError() {
+        MediaAsset owned = createMediaAsset(UUID.randomUUID(), MediaStatus.READY, false);
+        repository.save(owned);
+
+        UUID otherUploaderId = UUID.randomUUID();
+        insertUser(otherUploaderId);
+
+        MediaAsset other = createMediaAsset(UUID.randomUUID(), MediaStatus.READY, false);
+        other.setUploaderId(otherUploaderId);
+        repository.save(other);
+
+        when(securityUtils.isOwnerOrAdmin(owned.getUploaderId())).thenReturn(true);
+        when(securityUtils.isOwnerOrAdmin(otherUploaderId)).thenReturn(false);
+
+        BulkDeleteMediaResponse response =
+                mediaService.bulkDelete(Set.of(owned.getId(), other.getId()), uploaderId);
+
+        assertThat(response.getDeleted()).isEqualTo(1);
+        assertThat(response.getFailed()).isEqualTo(1);
+        assertThat(response.getDeletedIds()).containsExactly(owned.getId());
+        assertThat(response.getErrors()).hasSize(1);
+        assertThat(response.getErrors().get(0).getId()).isEqualTo(other.getId());
+        assertThat(response.getErrors().get(0).getError()).containsIgnoringCase("permission");
+    }
+
+    @Test
+    void bulkDelete_AlreadySoftDeleted_ReportsError() {
+        MediaAsset asset = createMediaAsset(UUID.randomUUID(), MediaStatus.READY, true);
+        asset.setDeletedAt(OffsetDateTime.now());
+        asset.setDeletedBy(uploaderId);
+        repository.save(asset);
+
+        BulkDeleteMediaResponse response =
+                mediaService.bulkDelete(Set.of(asset.getId()), uploaderId);
+
+        assertThat(response.getDeleted()).isZero();
+        assertThat(response.getFailed()).isEqualTo(1);
+        assertThat(response.getErrors()).hasSize(1);
+        assertThat(response.getErrors().get(0).getError()).containsIgnoringCase("not found");
+    }
+
+    @Test
+    void bulkDelete_EmptySet_ReturnsEmptyResponse() {
+        BulkDeleteMediaResponse response =
+                mediaService.bulkDelete(Set.of(), uploaderId);
+
+        assertThat(response.getDeleted()).isZero();
+        assertThat(response.getFailed()).isZero();
+        assertThat(response.getErrors()).isEmpty();
+        assertThat(response.getDeletedIds()).isEmpty();
+    }
+
+    @Test
+    void bulkDelete_DeletesVariantsForEachAsset() {
+        MediaAsset withVariants = createMediaAsset(UUID.randomUUID(), MediaStatus.READY, false);
+        withVariants.setThumbnailKey("media/" + withVariants.getId() + "/thumb/test.jpg");
+        withVariants.setLargeKey("media/" + withVariants.getId() + "/large/test.jpg");
+        repository.save(withVariants);
+
+        MediaAsset noVariants = createMediaAsset(UUID.randomUUID(), MediaStatus.READY, false);
+        repository.save(noVariants);
+
+        mediaService.bulkDelete(Set.of(withVariants.getId(), noVariants.getId()), uploaderId);
+
+        verify(s3Client, times(4)).deleteObject(any(DeleteObjectRequest.class));
+    }
+
+    private void insertUser(UUID id) {
+        userRepository.save(User.builder()
+                .id(id)
+                .username("user-" + id)
+                .email("user-" + id + "@example.com")
+                .build());
     }
 
     private MediaAsset createMediaAsset(UUID id, MediaStatus status, boolean softDeleted) {

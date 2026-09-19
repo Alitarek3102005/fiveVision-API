@@ -41,7 +41,9 @@ import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import java.net.URI;
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -125,6 +127,7 @@ public class MediaServiceImpl implements MediaService {
             PutObjectRequest putObjectRequest = PutObjectRequest.builder()
                     .bucket(storageProperties.getBucketName())
                     .key(fileKey)
+                    .contentType(request.getMimeType())
                     .build();
 
             PutObjectPresignRequest presignRequest = PutObjectPresignRequest.builder()
@@ -232,18 +235,80 @@ public class MediaServiceImpl implements MediaService {
         asset.setDeletedBy(securityUtils.getCurrentUserId());
         repository.save(asset);
 
-        try {
-            s3Client.deleteObject(DeleteObjectRequest.builder()
-                    .bucket(asset.getBucketName())
-                    .key(asset.getFileKey())
-                    .build());
-        } catch (SdkClientException | AwsServiceException ex) {
-            log.error("Failed to delete S3 object for mediaId={}", id, ex);
+        deleteObjectQuietly(asset.getBucketName(), asset.getFileKey());
+        if (asset.getThumbnailKey() != null) {
+            deleteObjectQuietly(asset.getBucketName(), asset.getThumbnailKey());
+        }
+        if (asset.getLargeKey() != null) {
+            deleteObjectQuietly(asset.getBucketName(), asset.getLargeKey());
         }
 
         log.info("Soft-deleted media asset id={}, uploaderId={}", id, asset.getUploaderId());
-
         eventPublisher.publishEvent(new MediaAssetDeletedEvent(id));
+    }
+    @Override
+    @Transactional
+    public BulkDeleteMediaResponse bulkDelete(Set<UUID> ids, UUID requesterId) {
+        List<UUID> deletedIds = new ArrayList<>();
+        List<BulkDeleteMediaResponseErrorsInner> errors = new ArrayList<>();
+
+        for (UUID id : ids) {
+            try {
+                MediaAsset asset = repository.findById(id).orElse(null);
+                if (asset == null || asset.getDeletedAt() != null) {
+                    errors.add(new BulkDeleteMediaResponseErrorsInner().id(id).error("Media not found"));
+                    continue;
+                }
+
+                if (!securityUtils.isOwnerOrAdmin(asset.getUploaderId())) {
+                    errors.add(new BulkDeleteMediaResponseErrorsInner()
+                            .id(id)
+                            .error("You do not have permission to delete this media asset."));
+                    continue;
+                }
+
+                asset.setDeletedAt(OffsetDateTime.now());
+                asset.setDeletedBy(requesterId);
+                repository.save(asset);
+
+                deleteObjectQuietly(asset.getBucketName(), asset.getFileKey());
+                if (asset.getThumbnailKey() != null) {
+                    deleteObjectQuietly(asset.getBucketName(), asset.getThumbnailKey());
+                }
+                if (asset.getLargeKey() != null) {
+                    deleteObjectQuietly(asset.getBucketName(), asset.getLargeKey());
+                }
+
+                deletedIds.add(id);
+
+            } catch (Exception ex) {
+                log.error("Failed to delete media {} in bulk operation", id, ex);
+                errors.add(new BulkDeleteMediaResponseErrorsInner()
+                        .id(id)
+                        .error(ex.getMessage() == null ? "Delete failed" : ex.getMessage()));
+            }
+        }
+
+        log.info("User [{}] bulk-deleted {}/{} media assets",
+                requesterId, deletedIds.size(), ids.size());
+
+        return new BulkDeleteMediaResponse()
+                .deleted(deletedIds.size())
+                .failed(errors.size())
+                .deletedIds(deletedIds)
+                .errors(errors);
+    }
+
+
+    private void deleteObjectQuietly(String bucket, String key) {
+        try {
+            s3Client.deleteObject(DeleteObjectRequest.builder()
+                    .bucket(bucket)
+                    .key(key)
+                    .build());
+        } catch (SdkClientException | AwsServiceException ex) {
+            log.warn("Failed to delete S3 object {}/{}: {}", bucket, key, ex.getMessage());
+        }
     }
 
     private MediaAsset findActiveById(UUID id) {

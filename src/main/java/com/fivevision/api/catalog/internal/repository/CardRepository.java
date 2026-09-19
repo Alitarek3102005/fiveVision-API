@@ -19,6 +19,7 @@ public interface CardRepository extends JpaRepository<NatureCard, UUID>, JpaSpec
     List<NatureCard> findAllByPrimaryMediaIdOrThumbnailMediaId(UUID primaryMediaId, UUID thumbnailMediaId);
     List<NatureCard> findAllByAuthorId(UUID authorId);
 
+
     static Specification<NatureCard> hasAuthorId(UUID authorId) {
         return (root, query, cb) -> authorId == null ? null : cb.equal(root.get("authorId"), authorId);
     }
@@ -53,4 +54,5 @@ public interface CardRepository extends JpaRepository<NatureCard, UUID>, JpaSpec
             return cb.equal(root.join("tags").get("id"), tagId);
         };
     }
+
 }

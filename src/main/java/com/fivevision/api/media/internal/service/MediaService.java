@@ -1,6 +1,8 @@
 package com.fivevision.api.media.internal.service;
 
 import com.fivevision.api.media.internal.dto.*;
+
+import java.util.Set;
 import java.util.UUID;
 
 public interface MediaService {
@@ -9,4 +11,5 @@ public interface MediaService {
     MediaAssetResponse completeUpload(UUID id, CompleteUploadRequest request);
     MediaAssetResponse getById(UUID id);
     void delete(UUID id);
+    BulkDeleteMediaResponse bulkDelete(Set<UUID> ids,UUID requesterId);
 }

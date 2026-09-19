@@ -36,6 +36,10 @@ public class User {
     @Builder.Default
     private String role = "CUSTOMER";
 
+    @Column(name = "is_active", nullable = false)
+    @Builder.Default
+    private Boolean isActive = true;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private OffsetDateTime createdAt;

@@ -7,7 +7,7 @@ permissions:
   packages: write
 
 env:
-  IMAGE_NAME: ghcr.io/alitarek3102005/fivevision-api   # lowercase owner
+  IMAGE_NAME: ghcr.io/alitarek3102005/fivevision-api
 
 jobs:
   build-and-test:
