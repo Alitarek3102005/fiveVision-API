@@ -12,11 +12,20 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class MediaLookupImpl implements MediaLookup {
+
     private final MediaAssetRepository mediaAssetRepository;
 
     @Override
     public Optional<MediaPublicSummary> findPublicSummary(UUID mediaId) {
         return mediaAssetRepository.findById(mediaId)
-                .map(asset -> new MediaPublicSummary(asset.getId(), asset.getCdnUrl(), asset.getType().name()));
+                .filter(asset -> asset.getDeletedAt() == null)
+                .map(asset -> new MediaPublicSummary(
+                        asset.getId(),
+                        asset.getCdnUrl(),
+                        asset.getThumbnailUrl(),
+                        asset.getLargeUrl(),
+                        asset.getType().name(),
+                        asset.getDurationSeconds()
+                ));
     }
 }

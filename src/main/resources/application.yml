@@ -14,7 +14,7 @@ spring:
   jpa:
     hibernate:
       ddl-auto: validate
-    show-sql: ${JPA_SHOW_SQL:true}
+    show-sql: ${JPA_SHOW_SQL:false}
     properties:
       hibernate:
         format_sql: true
@@ -31,6 +31,15 @@ spring:
         jwt:
           issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8080/realms/5vision}
 
+# --- NEW KEYCLOAK ADMIN CLIENT CONFIG ---
+app:
+  keycloak:
+    admin:
+      server-url: ${KEYCLOAK_ADMIN_SERVER_URL:http://localhost:8080}
+      realm: ${KEYCLOAK_ADMIN_REALM:5vision}
+      client-id: ${KEYCLOAK_ADMIN_CLIENT_ID:5vision-backend}
+      client-secret: ${KEYCLOAK_ADMIN_CLIENT_SECRET:paste-your-secret-here}
+
 storage:
   endpoint-url: ${MINIO_ENDPOINT:http://localhost:9000}
   access-key: ${MINIO_ACCESS_KEY:minioadmin}
@@ -41,8 +50,23 @@ storage:
 clamav:
   host: ${CLAMAV_HOST:localhost}
   port: ${CLAMAV_PORT:3310}
+  scan-timeout-ms: ${CLAMAV_SCAN_TIMEOUT_MS:60000}
+  ping-timeout-ms: ${CLAMAV_PING_TIMEOUT_MS:3000}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  tracing:
+    sampling:
+      probability: 1.0
 
 logging:
   level:
-    org.springframework.security: ${SECURITY_LOG_LEVEL:DEBUG}
+    org.springframework.security: ${SECURITY_LOG_LEVEL:INFO}
     org.springframework.modulith: INFO
+media:
+  video-poster:
+    enabled: ${VIDEO_POSTER_ENABLED:true}
+    ffmpeg-path: ${FFMPEG_PATH:ffmpeg}

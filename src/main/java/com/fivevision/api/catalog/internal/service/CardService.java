@@ -23,10 +23,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -46,20 +44,24 @@ public class CardService {
     private final MediaLookup mediaLookup;
     private final FavoriteRepository favoriteRepository;
 
-
     @Transactional(readOnly = true)
     public PagedCardResponse getCards(Integer page, Integer size, String sort, String search,
-                                      UUID categoryId, UUID tagId, Boolean isPremium) {
+                                      UUID categoryId, UUID tagId, Boolean isPremium, UUID authorId) {
         PageRequest pageRequest = buildPageRequest(page, size, sort);
 
         Specification<NatureCard> spec = Specification.where(CardRepository.hasStatus(CardStatus.PUBLISHED))
                 .and(CardRepository.searchKeyword(search))
                 .and(CardRepository.hasCategory(categoryId))
                 .and(CardRepository.hasTag(tagId))
-                .and(CardRepository.isPremium(isPremium));
+                .and(CardRepository.isPremium(isPremium))
+                .and(CardRepository.hasAuthorId(authorId));
 
         Page<NatureCard> cardPage = cardRepository.findAll(spec, pageRequest);
-        return cardMapper.toPagedResponse(cardPage);
+        PagedCardResponse response = cardMapper.toPagedResponse(cardPage);
+
+        enrichSummariesWithMedia(response, cardPage);
+
+        return response;
     }
 
     @Transactional(readOnly = true)
@@ -71,7 +73,11 @@ public class CardService {
                 .and(CardRepository.hasStatus(cardStatus));
 
         Page<NatureCard> cardPage = cardRepository.findAll(spec, pageRequest);
-        return cardMapper.toPagedResponse(cardPage);
+        PagedCardResponse response = cardMapper.toPagedResponse(cardPage);
+
+        enrichSummariesWithMedia(response, cardPage);
+
+        return response;
     }
 
     @Transactional(readOnly = true)
@@ -90,7 +96,15 @@ public class CardService {
 
         if (card.getPrimaryMediaId() != null) {
             mediaLookup.findPublicSummary(card.getPrimaryMediaId())
-                    .ifPresent(media -> response.setPrimaryMedia(toMediaSummary(media)));
+                    .ifPresent(media -> {
+                        response.setPrimaryMedia(toMediaSummary(media));
+
+                        response.setPrimaryMediaType(
+                                CardDetailResponse.PrimaryMediaTypeEnum.fromValue(media.type())
+                        );
+
+                        response.setDurationSeconds(media.durationSeconds());
+                    });
         }
 
         if (card.getThumbnailMediaId() != null) {
@@ -108,10 +122,16 @@ public class CardService {
         return response;
     }
 
-
     @Transactional
     public CardDetailResponse createCard(CreateCardRequest request, UUID authorId) {
         log.info("User [{}] is creating a new Nature Card: {}", authorId, request.getTitle());
+
+        UUID primaryId = request.getPrimaryMediaId();
+        UUID thumbnailId = request.getThumbnailMediaId();
+
+        if (thumbnailId == null && primaryId != null) {
+            thumbnailId = primaryId;
+        }
 
         NatureCard card = NatureCard.builder()
                 .id(UUID.randomUUID())
@@ -124,8 +144,8 @@ public class CardService {
                 .locationName(request.getLocationName())
                 .latitude(request.getLatitude() != null ? BigDecimal.valueOf(request.getLatitude()) : null)
                 .longitude(request.getLongitude() != null ? BigDecimal.valueOf(request.getLongitude()) : null)
-                .primaryMediaId(request.getPrimaryMediaId())
-                .thumbnailMediaId(request.getThumbnailMediaId())
+                .primaryMediaId(primaryId)
+                .thumbnailMediaId(thumbnailId)
                 .isPremium(request.getIsPremium())
                 .price(request.getPrice() != null ? BigDecimal.valueOf(request.getPrice()) : BigDecimal.ZERO)
                 .status(CardStatus.DRAFT)
@@ -161,8 +181,15 @@ public class CardService {
         if (request.getLatitude() != null) card.setLatitude(BigDecimal.valueOf(request.getLatitude()));
         if (request.getLongitude() != null) card.setLongitude(BigDecimal.valueOf(request.getLongitude()));
 
-        card.setPrimaryMediaId(request.getPrimaryMediaId());
-        card.setThumbnailMediaId(request.getThumbnailMediaId());
+        UUID primaryId = request.getPrimaryMediaId();
+        UUID thumbnailId = request.getThumbnailMediaId();
+
+        if (thumbnailId == null && primaryId != null) {
+            thumbnailId = primaryId;
+        }
+
+        card.setPrimaryMediaId(primaryId);
+        card.setThumbnailMediaId(thumbnailId);
         card.setIsPremium(request.getIsPremium());
 
         if (request.getPrice() != null) card.setPrice(BigDecimal.valueOf(request.getPrice()));
@@ -184,8 +211,54 @@ public class CardService {
             throw new ForbiddenAccessException("You do not have permission to delete this card.");
         }
 
+        favoriteRepository.deleteAllByIdCardId(id);
+
         cardRepository.delete(card);
         log.info("User [{}] successfully deleted Nature Card [{}]", requesterId, id);
+    }
+
+    @Transactional
+    public BulkDeleteCardsResponse bulkDelete(Set<UUID> ids, UUID requesterId) {
+        List<UUID> deletedIds = new ArrayList<>();
+        List<BulkDeleteCardsResponseErrorsInner> errors = new ArrayList<>();
+
+        for (UUID id : ids) {
+            try {
+                NatureCard card = cardRepository.findById(id).orElse(null);
+                if (card == null) {
+                    errors.add(new BulkDeleteCardsResponseErrorsInner()
+                            .id(id)
+                            .error("Card not found"));
+                    continue;
+                }
+
+                if (!securityUtils.isOwnerOrAdmin(card.getAuthorId())) {
+                    errors.add(new BulkDeleteCardsResponseErrorsInner()
+                            .id(id)
+                            .error("You do not have permission to delete this card."));
+                    continue;
+                }
+
+                favoriteRepository.deleteAllByIdCardId(id);
+                cardRepository.delete(card);
+                deletedIds.add(id);
+
+            } catch (Exception ex) {
+                log.error("Failed to delete card {} in bulk operation", id, ex);
+                errors.add(new BulkDeleteCardsResponseErrorsInner()
+                        .id(id)
+                        .error(ex.getMessage() == null ? "Delete failed" : ex.getMessage()));
+            }
+        }
+
+        log.info("User [{}] bulk-deleted {}/{} cards",
+                requesterId, deletedIds.size(), ids.size());
+
+        return new BulkDeleteCardsResponse()
+                .deleted(deletedIds.size())
+                .failed(errors.size())
+                .deletedIds(deletedIds)
+                .errors(errors);
     }
 
     @Transactional
@@ -195,7 +268,6 @@ public class CardService {
         card.setViewCount(card.getViewCount() + 1);
         cardRepository.save(card);
     }
-
 
     private PageRequest buildPageRequest(Integer page, Integer size, String sort) {
         int safePage = (page != null && page >= 0) ? page : 0;
@@ -248,8 +320,11 @@ public class CardService {
         return new MediaSummary()
                 .id(media.id())
                 .cdnUrl(media.cdnUrl())
+                .thumbnailUrl(media.thumbnailUrl())
+                .largeUrl(media.largeUrl())
                 .type(MediaSummary.TypeEnum.fromValue(media.type()));
     }
+
     private void validateMediaReferences(CreateCardRequest request) {
         if (request.getPrimaryMediaId() != null) {
             mediaLookup.findPublicSummary(request.getPrimaryMediaId())
@@ -260,6 +335,7 @@ public class CardService {
                     .orElseThrow(() -> new IllegalArgumentException("Thumbnail media not found"));
         }
     }
+
     private void validateMediaReferences(UpdateCardRequest request) {
         if (request.getPrimaryMediaId() != null) {
             mediaLookup.findPublicSummary(request.getPrimaryMediaId())
@@ -271,4 +347,30 @@ public class CardService {
         }
     }
 
+    private void enrichSummariesWithMedia(PagedCardResponse response, Page<NatureCard> cardPage) {
+        if (response.getContent() == null || response.getContent().isEmpty()) return;
+
+        Map<UUID, NatureCard> byId = cardPage.getContent().stream()
+                .collect(Collectors.toMap(NatureCard::getId, c -> c));
+
+        for (CardSummaryResponse summary : response.getContent()) {
+            NatureCard card = byId.get(summary.getId());
+            if (card == null) continue;
+
+            if (card.getPrimaryMediaId() != null) {
+                mediaLookup.findPublicSummary(card.getPrimaryMediaId())
+                        .ifPresent(media -> {
+                            summary.setPrimaryMediaType(
+                                    CardSummaryResponse.PrimaryMediaTypeEnum.fromValue(media.type())
+                            );
+                            summary.setDurationSeconds(media.durationSeconds());
+                        });
+            }
+
+            if (card.getThumbnailMediaId() != null) {
+                mediaLookup.findPublicSummary(card.getThumbnailMediaId())
+                        .ifPresent(media -> summary.setThumbnailMedia(toMediaSummary(media)));
+            }
+        }
+    }
 }

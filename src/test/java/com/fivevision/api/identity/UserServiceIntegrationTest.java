@@ -6,6 +6,7 @@ import com.fivevision.api.common.security.SecurityUtils;
 import com.fivevision.api.identity.internal.dto.*;
 import com.fivevision.api.identity.internal.entity.User;
 import com.fivevision.api.identity.internal.repository.UserRepository;
+import com.fivevision.api.identity.internal.service.KeycloakRoleSync;
 import com.fivevision.api.identity.internal.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -36,6 +37,9 @@ public class UserServiceIntegrationTest extends AbstractIntegrationTest {
 
     @MockitoBean
     private SecurityUtils securityUtils;
+
+    @MockitoBean
+    private KeycloakRoleSync keycloakRoleSync;
 
     private UUID currentUserId;
 
@@ -183,6 +187,59 @@ public class UserServiceIntegrationTest extends AbstractIntegrationTest {
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
+
+    @Test
+    void adminUpdateUser_UpdatesRoleAndStatus() {
+        UUID targetId = UUID.randomUUID();
+        User targetUser = createUser(targetId, "targetuser", "target@example.com", "Old", "Name", "CUSTOMER");
+        userRepository.save(targetUser);
+
+        AdminUpdateUserRequest request = new AdminUpdateUserRequest()
+                .firstName("AdminUpdated")
+                .role(AdminUpdateUserRequest.RoleEnum.AUTHOR)
+                .isActive(false);
+
+        UserProfileResponse response = userService.adminUpdateUser(targetId, request);
+
+        assertThat(response.getFirstName()).isEqualTo("AdminUpdated");
+        assertThat(response.getRole()).isEqualTo(UserProfileResponse.RoleEnum.AUTHOR);
+        assertThat(response.getIsActive()).isFalse();
+
+        User updated = userRepository.findById(targetId).orElseThrow();
+        assertThat(updated.getFirstName()).isEqualTo("AdminUpdated");
+        assertThat(updated.getRole()).isEqualTo("AUTHOR");
+        assertThat(updated.getIsActive()).isFalse();
+    }
+
+    @Test
+    void adminUpdateUser_UserNotFoundThrows() {
+        AdminUpdateUserRequest request = new AdminUpdateUserRequest()
+                .role(AdminUpdateUserRequest.RoleEnum.AUTHOR);
+
+        assertThatThrownBy(() -> userService.adminUpdateUser(UUID.randomUUID(), request))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void deleteUser_RemovesUserFromDatabase() {
+        UUID targetId = UUID.randomUUID();
+        User targetUser = createUser(targetId, "deleteuser", "delete@example.com", "Delete", "Me", "CUSTOMER");
+        userRepository.save(targetUser);
+
+        assertThat(userRepository.existsById(targetId)).isTrue();
+
+        userService.deleteUser(targetId);
+
+        assertThat(userRepository.existsById(targetId)).isFalse();
+    }
+
+    @Test
+    void deleteUser_UserNotFoundThrows() {
+        assertThatThrownBy(() -> userService.deleteUser(UUID.randomUUID()))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+
     private User createUser(UUID id, String username, String email, String firstName, String lastName, String role) {
         return User.builder()
                 .id(id)
@@ -191,6 +248,7 @@ public class UserServiceIntegrationTest extends AbstractIntegrationTest {
                 .firstName(firstName)
                 .lastName(lastName)
                 .role(role)
+                .isActive(true)
                 .build();
     }
 }

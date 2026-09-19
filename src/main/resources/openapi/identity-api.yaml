@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
   title: 5Vision Identity API
-  version: 1.2.0
-  description: Handles user profile synchronization with Keycloak and public profiles.
+  version: 1.3.0
+  description: Handles user profile synchronization with Keycloak, public profiles, and admin management.
 security:
   - bearerAuth: []
 tags:
@@ -125,6 +125,62 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+    put:
+      tags: [Users]
+      summary: Update a user's details and role (Admin)
+      description: Allows administrators to modify user attributes, including promoting a CUSTOMER to an AUTHOR or ADMIN.
+      operationId: adminUpdateUser
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminUpdateUserRequest'
+      responses:
+        '200':
+          description: User updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    delete:
+      tags: [Users]
+      summary: Delete or deactivate a user (Admin)
+      description: Removes a user from the platform or flags them as inactive.
+      operationId: deleteUser
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: User successfully deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -194,6 +250,28 @@ components:
           maxLength: 100
           pattern: '^[A-Za-zÀ-ÖØ-öø-ÿ'' -]+$'
 
+    # NEW: DTO for Admin updates
+    AdminUpdateUserRequest:
+      type: object
+      properties:
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 100
+          pattern: '^[A-Za-zÀ-ÖØ-öø-ÿ'' -]+$'
+        lastName:
+          type: string
+          minLength: 1
+          maxLength: 100
+          pattern: '^[A-Za-zÀ-ÖØ-öø-ÿ'' -]+$'
+        role:
+          type: string
+          enum: [CUSTOMER, AUTHOR, ADMIN]
+          description: Allows the admin to modify the user's system privileges.
+        isActive:
+          type: boolean
+          description: Flag to suspend or activate the user account.
+
     UserProfileResponse:
       type: object
       properties:
@@ -205,6 +283,7 @@ components:
         role:
           type: string
           enum: [CUSTOMER, AUTHOR, ADMIN]
+        isActive: { type: boolean } # Added to reflect the new state from Admin updates
         createdAt: { type: string, format: date-time }
         lastLogin: { type: string, format: date-time }
 

@@ -1,10 +1,10 @@
 package com.fivevision.api.identity.internal.mapper;
 
-
 import com.fivevision.api.identity.internal.dto.UserProfileResponse;
 import com.fivevision.api.identity.internal.dto.UserSummaryResponse;
 import com.fivevision.api.identity.internal.entity.User;
 import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
 import org.mapstruct.MappingConstants;
 import org.mapstruct.ReportingPolicy;
 
@@ -12,6 +12,7 @@ import org.mapstruct.ReportingPolicy;
         unmappedTargetPolicy = ReportingPolicy.IGNORE)
 public interface UserMapper {
 
+    @Mapping(target = "isActive", source = "isActive")
     UserProfileResponse toProfileResponse(User user);
 
     UserSummaryResponse toSummaryResponse(User user);

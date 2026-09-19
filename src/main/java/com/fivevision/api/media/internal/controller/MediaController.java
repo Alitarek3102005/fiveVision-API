@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.HashSet;
 import java.util.UUID;
 
 @RestController
@@ -34,6 +35,15 @@ public class MediaController implements MediaApi {
     public ResponseEntity<InitiateUploadResponse> initiateUpload(InitiateUploadRequest initiateUploadRequest) {
         UUID uploaderId = securityUtils.getCurrentUserId();
         return ResponseEntity.ok(mediaService.initiateUpload(initiateUploadRequest, uploaderId));
+    }
+
+    @Override
+    @PreAuthorize("hasAnyRole('AUTHOR','ADMIN')")
+    public ResponseEntity<BulkDeleteMediaResponse> bulkDeleteMedia(BulkDeleteMediaRequest request) {
+        UUID requesterId = securityUtils.getCurrentUserId();
+        BulkDeleteMediaResponse response = mediaService.bulkDelete(
+                new HashSet<>(request.getIds()), requesterId);
+        return ResponseEntity.ok(response);
     }
 
     @Override

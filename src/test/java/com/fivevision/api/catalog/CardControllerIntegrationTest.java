@@ -48,7 +48,7 @@ public class CardControllerIntegrationTest extends AbstractIntegrationTest {
         response.setTotalPages(1);
         response.setIsLast(true);
 
-        when(cardService.getCards(0, 20, "createdAt,desc", null, null, null, null))
+        when(cardService.getCards(0, 20, "createdAt,desc", null, null, null, null, null))
                 .thenReturn(response);
 
         mockMvc.perform(get("/api/v1/cards"))
@@ -77,8 +77,7 @@ public class CardControllerIntegrationTest extends AbstractIntegrationTest {
         when(cardService.getMyCards(eq(userId), eq(0), eq(20), eq(null), eq("updatedAt,desc")))
                 .thenReturn(response);
 
-        mockMvc.perform(get("/api/v1/cards/my-cards")
-                        .with(jwt))
+        mockMvc.perform(get("/api/v1/cards/my-cards").with(jwt))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].title").value("My Card"));
     }
@@ -157,7 +156,6 @@ public class CardControllerIntegrationTest extends AbstractIntegrationTest {
     }
 
 
-
     @Test
     void updateCard_Authenticated_ReturnsUpdatedCard() throws Exception {
         UUID userId = UUID.randomUUID();
@@ -192,7 +190,6 @@ public class CardControllerIntegrationTest extends AbstractIntegrationTest {
     }
 
 
-
     @Test
     void deleteCard_Authenticated_ReturnsNoContent() throws Exception {
         UUID userId = UUID.randomUUID();
@@ -200,8 +197,7 @@ public class CardControllerIntegrationTest extends AbstractIntegrationTest {
         RequestPostProcessor jwt = jwtWithRole("AUTHOR");
         when(securityUtils.getCurrentUserId()).thenReturn(userId);
 
-        mockMvc.perform(delete("/api/v1/cards/{id}", cardId)
-                        .with(jwt))
+        mockMvc.perform(delete("/api/v1/cards/{id}", cardId).with(jwt))
                 .andExpect(status().isNoContent());
     }
 
@@ -212,6 +208,131 @@ public class CardControllerIntegrationTest extends AbstractIntegrationTest {
 
         mockMvc.perform(post("/api/v1/cards/{id}/view", cardId))
                 .andExpect(status().isNoContent());
+    }
+
+
+    @Test
+    void bulkDeleteCards_WithAuthorRole_ReturnsResponse() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID cardA = UUID.randomUUID();
+        UUID cardB = UUID.randomUUID();
+        RequestPostProcessor jwt = jwtWithRole("AUTHOR");
+        when(securityUtils.getCurrentUserId()).thenReturn(userId);
+
+        BulkDeleteCardsResponse response = new BulkDeleteCardsResponse()
+                .deleted(2)
+                .failed(0)
+                .deletedIds(List.of(cardA, cardB))
+                .errors(List.of());
+
+        when(cardService.bulkDelete(any(), eq(userId))).thenReturn(response);
+
+        String requestBody = """
+                {
+                  "ids": ["%s", "%s"]
+                }
+                """.formatted(cardA, cardB);
+
+        mockMvc.perform(post("/api/v1/cards/bulk-delete")
+                        .with(jwt)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.deleted").value(2))
+                .andExpect(jsonPath("$.failed").value(0))
+                .andExpect(jsonPath("$.deletedIds.length()").value(2))
+                .andExpect(jsonPath("$.errors.length()").value(0));
+    }
+
+    @Test
+    void bulkDeleteCards_WithAdminRole_ReturnsResponse() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID cardA = UUID.randomUUID();
+        RequestPostProcessor jwt = jwtWithRole("ADMIN");
+        when(securityUtils.getCurrentUserId()).thenReturn(userId);
+
+        BulkDeleteCardsResponse response = new BulkDeleteCardsResponse()
+                .deleted(1)
+                .failed(0)
+                .deletedIds(List.of(cardA))
+                .errors(List.of());
+
+        when(cardService.bulkDelete(any(), eq(userId))).thenReturn(response);
+
+        String requestBody = """
+                {
+                  "ids": ["%s"]
+                }
+                """.formatted(cardA);
+
+        mockMvc.perform(post("/api/v1/cards/bulk-delete")
+                        .with(jwt)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.deleted").value(1));
+    }
+
+    @Test
+    void bulkDeleteCards_WithoutRequiredRole_Returns403() throws Exception {
+        RequestPostProcessor jwt = jwtWithRole("CUSTOMER");
+        UUID cardA = UUID.randomUUID();
+
+        String requestBody = """
+                {
+                  "ids": ["%s"]
+                }
+                """.formatted(cardA);
+
+        mockMvc.perform(post("/api/v1/cards/bulk-delete")
+                        .with(jwt)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void bulkDeleteCards_Unauthenticated_Returns401() throws Exception {
+        UUID cardA = UUID.randomUUID();
+
+        String requestBody = """
+                {
+                  "ids": ["%s"]
+                }
+                """.formatted(cardA);
+
+        mockMvc.perform(post("/api/v1/cards/bulk-delete")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void bulkDeleteCards_EmptyIds_Returns400() throws Exception {
+        RequestPostProcessor jwt = jwtWithRole("AUTHOR");
+
+        String requestBody = """
+                {
+                  "ids": []
+                }
+                """;
+
+        mockMvc.perform(post("/api/v1/cards/bulk-delete")
+                        .with(jwt)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void bulkDeleteCards_MissingIdsField_Returns400() throws Exception {
+        RequestPostProcessor jwt = jwtWithRole("AUTHOR");
+
+        mockMvc.perform(post("/api/v1/cards/bulk-delete")
+                        .with(jwt)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
     }
 
 

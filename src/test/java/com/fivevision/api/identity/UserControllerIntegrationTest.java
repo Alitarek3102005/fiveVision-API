@@ -18,6 +18,7 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -163,6 +164,80 @@ public class UserControllerIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.username").value("publicuser"))
                 .andExpect(jsonPath("$.role").value("AUTHOR"));
+    }
+
+
+    @Test
+    void adminUpdateUser_Admin_ReturnsUpdatedProfile() throws Exception {
+        RequestPostProcessor adminJwt = jwtWithRole("ADMIN");
+        UUID targetUserId = UUID.randomUUID();
+
+        UserProfileResponse response = new UserProfileResponse()
+                .id(targetUserId)
+                .username("targetuser")
+                .firstName("AdminUpdated")
+                .role(UserProfileResponse.RoleEnum.AUTHOR)
+                .isActive(false);
+
+        when(userService.adminUpdateUser(eq(targetUserId), any(AdminUpdateUserRequest.class)))
+                .thenReturn(response);
+
+        String requestBody = """
+                {
+                  "firstName": "AdminUpdated",
+                  "role": "AUTHOR",
+                  "isActive": false
+                }
+                """;
+
+        mockMvc.perform(put("/api/v1/users/{id}", targetUserId)
+                        .with(adminJwt)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.firstName").value("AdminUpdated"))
+                .andExpect(jsonPath("$.role").value("AUTHOR"))
+                .andExpect(jsonPath("$.isActive").value(false));
+    }
+
+    @Test
+    void adminUpdateUser_NonAdmin_Returns403() throws Exception {
+        RequestPostProcessor authorJwt = jwtWithRole("AUTHOR");
+        UUID targetUserId = UUID.randomUUID();
+
+        String requestBody = """
+                {
+                  "role": "ADMIN"
+                }
+                """;
+
+        mockMvc.perform(put("/api/v1/users/{id}", targetUserId)
+                        .with(authorJwt)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void deleteUser_Admin_Returns204() throws Exception {
+        RequestPostProcessor adminJwt = jwtWithRole("ADMIN");
+        UUID targetUserId = UUID.randomUUID();
+
+        mockMvc.perform(delete("/api/v1/users/{id}", targetUserId)
+                        .with(adminJwt))
+                .andExpect(status().isNoContent());
+
+        verify(userService).deleteUser(targetUserId);
+    }
+
+    @Test
+    void deleteUser_NonAdmin_Returns403() throws Exception {
+        RequestPostProcessor customerJwt = jwtWithRole("CUSTOMER");
+        UUID targetUserId = UUID.randomUUID();
+
+        mockMvc.perform(delete("/api/v1/users/{id}", targetUserId)
+                        .with(customerJwt))
+                .andExpect(status().isForbidden());
     }
 
     private RequestPostProcessor jwtWithRole(String role) {

@@ -1,5 +1,7 @@
 package com.fivevision.api.catalog.internal.service;
 
+import com.fivevision.api.catalog.internal.dto.CardSummaryResponse;
+import com.fivevision.api.catalog.internal.dto.MediaSummary;
 import com.fivevision.api.catalog.internal.dto.PagedCardResponse;
 import com.fivevision.api.catalog.internal.entity.Favorite;
 import com.fivevision.api.catalog.internal.entity.FavoriteId;
@@ -8,6 +10,8 @@ import com.fivevision.api.catalog.internal.mapper.CardMapper;
 import com.fivevision.api.catalog.internal.repository.CardRepository;
 import com.fivevision.api.catalog.internal.repository.FavoriteRepository;
 import com.fivevision.api.common.exception.ResourceNotFoundException;
+import com.fivevision.api.media.MediaLookup;
+import com.fivevision.api.media.MediaPublicSummary;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -29,6 +33,8 @@ public class FavoriteService {
     private final CardRepository cardRepository;
     private final CardMapper cardMapper;
 
+    private final MediaLookup mediaLookup;
+
     @Transactional(readOnly = true)
     public PagedCardResponse getFavoriteCards(UUID userId, Integer page, Integer size) {
         int safePage = page != null ? page : 0;
@@ -42,7 +48,12 @@ public class FavoriteService {
 
         PageRequest pageRequest = PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.DESC, "createdAt"));
         Page<NatureCard> favoritedCards = favoriteRepository.findFavoritedCardsByUserId(userId, pageRequest);
-        return cardMapper.toPagedResponse(favoritedCards);
+
+        PagedCardResponse response = cardMapper.toPagedResponse(favoritedCards);
+
+        enrichSummariesWithMedia(response, favoritedCards);
+
+        return response;
     }
 
     @Transactional
@@ -85,5 +96,30 @@ public class FavoriteService {
 
             log.info("User [{}] successfully unfavorited card [{}]", userId, cardId);
         }
+    }
+
+    private void enrichSummariesWithMedia(PagedCardResponse response, Page<NatureCard> cardPage) {
+        if (response.getContent() == null) return;
+
+        for (CardSummaryResponse summary : response.getContent()) {
+            cardPage.stream()
+                    .filter(c -> c.getId().equals(summary.getId()))
+                    .findFirst()
+                    .ifPresent(card -> {
+                        if (card.getThumbnailMediaId() != null) {
+                            mediaLookup.findPublicSummary(card.getThumbnailMediaId())
+                                    .ifPresent(media -> summary.setThumbnailMedia(toMediaSummary(media)));
+                        }
+                    });
+        }
+    }
+
+    private MediaSummary toMediaSummary(MediaPublicSummary media) {
+        return new MediaSummary()
+                .id(media.id())
+                .cdnUrl(media.cdnUrl())
+                .thumbnailUrl(media.thumbnailUrl())
+                .largeUrl(media.largeUrl())
+                .type(MediaSummary.TypeEnum.fromValue(media.type()));
     }
 }

@@ -8,6 +8,7 @@ import org.mapstruct.MappingConstants;
 import org.springframework.data.domain.Page;
 
 import java.util.List;
+import java.util.UUID;
 
 @Mapper(
         componentModel = MappingConstants.ComponentModel.SPRING,
@@ -16,12 +17,16 @@ import java.util.List;
 public interface CardMapper {
 
     @Mapping(target = "thumbnailMedia", ignore = true)
+    @Mapping(target = "primaryMediaType", ignore = true)
+    @Mapping(target = "durationSeconds",  ignore = true)
     CardSummaryResponse toSummaryResponse(NatureCard card);
 
-    @Mapping(target = "primaryMedia", ignore = true)
-    @Mapping(target = "thumbnailMedia", ignore = true)
-    @Mapping(target = "author", ignore = true)
-    @Mapping(target = "isFavorited", ignore = true)
+    @Mapping(target = "primaryMedia",     ignore = true)
+    @Mapping(target = "thumbnailMedia",   ignore = true)
+    @Mapping(target = "author",           ignore = true)
+    @Mapping(target = "isFavorited",      ignore = true)
+    @Mapping(target = "primaryMediaType", ignore = true)
+    @Mapping(target = "durationSeconds",  ignore = true)
     CardDetailResponse toDetailResponse(NatureCard card);
 
     default PagedCardResponse toPagedResponse(Page<NatureCard> page) {

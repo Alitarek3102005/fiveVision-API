@@ -4,12 +4,14 @@ import com.fivevision.api.catalog.internal.api.CardsApi;
 import com.fivevision.api.catalog.internal.dto.*;
 import com.fivevision.api.catalog.internal.service.CardService;
 import com.fivevision.api.common.security.SecurityUtils;
+import com.fivevision.api.media.internal.dto.BulkDeleteMediaResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URI;
+import java.util.HashSet;
 import java.util.UUID;
 
 @RestController
@@ -20,14 +22,7 @@ public class CardController implements CardsApi {
     private final SecurityUtils securityUtils;
     private static final int MAX_PAGE_SIZE = 100;
 
-    @Override
-    @PreAuthorize("permitAll()")
-    public ResponseEntity<PagedCardResponse> getCards(Integer page, Integer size, String sort, String search,
-                                                      UUID categoryId, UUID tagId, Boolean isPremium) {
-        int safePage = page != null ? page : 0;
-        int safeSize = size != null ? Math.min(size, MAX_PAGE_SIZE) : 20;
-        return ResponseEntity.ok(cardService.getCards(safePage, safeSize, sort, search, categoryId, tagId, isPremium));
-    }
+
 
     @Override
     @PreAuthorize("isAuthenticated()")
@@ -42,6 +37,30 @@ public class CardController implements CardsApi {
     @PreAuthorize("permitAll()")
     public ResponseEntity<CardDetailResponse> getCardById(UUID id) {
         return ResponseEntity.ok(cardService.getCardById(id));
+    }
+
+    @Override
+    public ResponseEntity<PagedCardResponse> getCards(
+            Integer page,
+            Integer size,
+            String sort,
+            String search,
+            UUID categoryId,
+            UUID tagId,
+            Boolean isPremium,
+            UUID authorId 
+    ) {
+        return ResponseEntity.ok(cardService.getCards(
+                page, size, sort, search, categoryId, tagId, isPremium, authorId
+        ));
+    }
+
+    @Override
+    public ResponseEntity<BulkDeleteCardsResponse> bulkDeleteCards(BulkDeleteCardsRequest bulkDeleteCardsRequest) {
+        UUID requesterId = securityUtils.getCurrentUserId();
+        BulkDeleteCardsResponse response = cardService.bulkDelete(
+                new HashSet<>(bulkDeleteCardsRequest.getIds()), requesterId);
+        return ResponseEntity.ok(response);
     }
 
     @Override

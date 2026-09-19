@@ -10,14 +10,17 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.AuthenticationEntryPoint;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 
 @Configuration
@@ -26,37 +29,60 @@ import java.util.Map;
 public class SecurityConfig {
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http, RateLimitFilter rateLimitFilter) throws Exception {
+    public SecurityFilterChain filterChain(HttpSecurity http,
+                                           RateLimitFilter rateLimitFilter,
+                                           CorsConfigurationSource corsConfigurationSource) throws Exception {
         http
+                .cors(Customizer.withDefaults())
                 .csrf(csrf -> csrf.disable())
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint(restAuthenticationEntryPoint())
                 )
                 .authorizeHttpRequests(auth -> auth
 
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+
+                        .requestMatchers("/actuator/health", "/actuator/prometheus").permitAll()
                         .requestMatchers(
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",
                                 "/swagger-ui.html"
                         ).permitAll()
+
                         .requestMatchers(HttpMethod.GET, "/api/v1/cards").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/cards/{id}").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/v1/cards/{id}/view").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/categories").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/tags").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/users/{id}").permitAll()
 
-                        .requestMatchers(HttpMethod.POST, "/api/v1/categories").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.PUT, "/api/v1/categories/{id}").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.DELETE, "/api/v1/categories/{id}").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.POST, "/api/v1/tags").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.PUT, "/api/v1/tags/{id}").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.DELETE, "/api/v1/tags/{id}").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.GET, "/api/v1/users").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET,  "/api/v1/cards/my-cards").authenticated()
+                        .requestMatchers(HttpMethod.GET,  "/api/v1/users/me").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/users/sync").authenticated()
 
-                        .requestMatchers(HttpMethod.POST, "/api/v1/cards").hasAnyRole("AUTHOR", "ADMIN")
-                        .requestMatchers(HttpMethod.GET, "/api/v1/media").hasAnyRole("AUTHOR", "ADMIN")
-                        .requestMatchers(HttpMethod.POST, "/api/v1/media/upload-url").hasAnyRole("AUTHOR", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/cards/{id}/view").permitAll()
+
+                        .requestMatchers(HttpMethod.POST,   "/api/v1/cards/{id}/favorite").authenticated()
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/cards/{id}/favorite").authenticated()
+
+                        .requestMatchers(HttpMethod.POST,   "/api/v1/categories").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT,    "/api/v1/categories/{id}").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/categories/{id}").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST,   "/api/v1/tags").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT,    "/api/v1/tags/{id}").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/tags/{id}").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET,    "/api/v1/users").hasRole("ADMIN")
+
+                        .requestMatchers(HttpMethod.POST,   "/api/v1/cards/bulk-delete").hasAnyRole("AUTHOR", "ADMIN")
+                        .requestMatchers(HttpMethod.POST,   "/api/v1/cards").hasAnyRole("AUTHOR", "ADMIN")
+                        .requestMatchers(HttpMethod.PUT,    "/api/v1/cards/{id}").hasAnyRole("AUTHOR", "ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/cards/{id}").hasAnyRole("AUTHOR", "ADMIN")
+
+                        .requestMatchers(HttpMethod.GET,    "/api/v1/media").hasAnyRole("AUTHOR", "ADMIN")
+                        .requestMatchers(HttpMethod.GET,    "/api/v1/media/{id}").hasAnyRole("AUTHOR", "ADMIN")
+                        .requestMatchers(HttpMethod.POST,   "/api/v1/media/upload-url").hasAnyRole("AUTHOR", "ADMIN")
+                        .requestMatchers(HttpMethod.POST,   "/api/v1/media/bulk-delete").hasAnyRole("AUTHOR", "ADMIN")
+                        .requestMatchers(HttpMethod.POST,   "/api/v1/media/{id}/complete").hasAnyRole("AUTHOR", "ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/media/{id}").hasAnyRole("AUTHOR", "ADMIN")
 
                         .anyRequest().authenticated()
                 )
@@ -66,6 +92,19 @@ public class SecurityConfig {
                 .addFilterAfter(rateLimitFilter, BearerTokenAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.setAllowedOrigins(List.of("http://localhost:4200"));
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        configuration.setAllowedHeaders(List.of("*"));
+        configuration.setAllowCredentials(true);
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
+        return source;
     }
 
     @Bean

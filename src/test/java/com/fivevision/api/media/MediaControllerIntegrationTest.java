@@ -2,11 +2,7 @@ package com.fivevision.api.media;
 
 import com.fivevision.api.AbstractIntegrationTest;
 import com.fivevision.api.common.security.SecurityUtils;
-import com.fivevision.api.media.internal.dto.CompleteUploadRequest;
-import com.fivevision.api.media.internal.dto.InitiateUploadRequest;
-import com.fivevision.api.media.internal.dto.InitiateUploadResponse;
-import com.fivevision.api.media.internal.dto.MediaAssetResponse;
-import com.fivevision.api.media.internal.dto.PagedMediaResponse;
+import com.fivevision.api.media.internal.dto.*;
 import com.fivevision.api.media.internal.service.MediaService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,6 +36,7 @@ public class MediaControllerIntegrationTest extends AbstractIntegrationTest {
 
     @MockitoBean
     private SecurityUtils securityUtils;
+
 
     @Test
     void getMediaAssets_ShouldReturnPagedList() throws Exception {
@@ -75,6 +72,13 @@ public class MediaControllerIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void getMediaAssets_Unauthenticated_Returns401() throws Exception {
+        mockMvc.perform(get("/api/v1/media"))
+                .andExpect(status().isUnauthorized());
+    }
+
+
+    @Test
     void initiateUpload_ShouldReturnUploadUrl() throws Exception {
         UUID userId = UUID.randomUUID();
         RequestPostProcessor jwt = jwtWithRole("AUTHOR");
@@ -107,6 +111,44 @@ public class MediaControllerIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void initiateUpload_WithoutRole_Returns403() throws Exception {
+        RequestPostProcessor jwt = jwtWithRole("CUSTOMER");
+
+        String requestBody = """
+                {
+                  "fileName": "test.jpg",
+                  "mimeType": "image/jpeg",
+                  "sizeBytes": 1000,
+                  "type": "PHOTO"
+                }
+                """;
+
+        mockMvc.perform(post("/api/v1/media/upload-url")
+                        .with(jwt)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void initiateUpload_Unauthenticated_Returns401() throws Exception {
+        String requestBody = """
+                {
+                  "fileName": "test.jpg",
+                  "mimeType": "image/jpeg",
+                  "sizeBytes": 1000,
+                  "type": "PHOTO"
+                }
+                """;
+
+        mockMvc.perform(post("/api/v1/media/upload-url")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isUnauthorized());
+    }
+
+
+    @Test
     void completeUpload_ShouldReturnReadyAsset() throws Exception {
         UUID mediaId = UUID.randomUUID();
         RequestPostProcessor jwt = jwtWithRole("AUTHOR");
@@ -127,6 +169,28 @@ public class MediaControllerIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void completeUpload_WithoutRole_Returns403() throws Exception {
+        UUID mediaId = UUID.randomUUID();
+        RequestPostProcessor jwt = jwtWithRole("CUSTOMER");
+
+        mockMvc.perform(post("/api/v1/media/{id}/complete", mediaId)
+                        .with(jwt)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void completeUpload_Unauthenticated_Returns401() throws Exception {
+        UUID mediaId = UUID.randomUUID();
+
+        mockMvc.perform(post("/api/v1/media/{id}/complete", mediaId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void getMediaById_ShouldReturnAsset() throws Exception {
         UUID mediaId = UUID.randomUUID();
         RequestPostProcessor jwt = jwtWithRole("AUTHOR");
@@ -143,6 +207,24 @@ public class MediaControllerIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void getMediaById_WithoutRole_Returns403() throws Exception {
+        UUID mediaId = UUID.randomUUID();
+        RequestPostProcessor jwt = jwtWithRole("CUSTOMER");
+
+        mockMvc.perform(get("/api/v1/media/{id}", mediaId).with(jwt))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void getMediaById_Unauthenticated_Returns401() throws Exception {
+        UUID mediaId = UUID.randomUUID();
+
+        mockMvc.perform(get("/api/v1/media/{id}", mediaId))
+                .andExpect(status().isUnauthorized());
+    }
+
+
+    @Test
     void deleteMedia_ShouldReturnNoContent() throws Exception {
         UUID mediaId = UUID.randomUUID();
         RequestPostProcessor jwt = jwtWithRole("AUTHOR");
@@ -150,6 +232,151 @@ public class MediaControllerIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(delete("/api/v1/media/{id}", mediaId).with(jwt))
                 .andExpect(status().isNoContent());
     }
+
+    @Test
+    void deleteMedia_WithoutRole_Returns403() throws Exception {
+        UUID mediaId = UUID.randomUUID();
+        RequestPostProcessor jwt = jwtWithRole("CUSTOMER");
+
+        mockMvc.perform(delete("/api/v1/media/{id}", mediaId).with(jwt))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void deleteMedia_Unauthenticated_Returns401() throws Exception {
+        UUID mediaId = UUID.randomUUID();
+
+        mockMvc.perform(delete("/api/v1/media/{id}", mediaId))
+                .andExpect(status().isUnauthorized());
+    }
+
+
+    @Test
+    void bulkDeleteMedia_WithAuthorRole_ReturnsResponse() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID mediaA = UUID.randomUUID();
+        UUID mediaB = UUID.randomUUID();
+        RequestPostProcessor jwt = jwtWithRole("AUTHOR");
+        when(securityUtils.getCurrentUserId()).thenReturn(userId);
+
+        BulkDeleteMediaResponse response = new BulkDeleteMediaResponse()
+                .deleted(2)
+                .failed(0)
+                .deletedIds(List.of(mediaA, mediaB))
+                .errors(List.of());
+
+        when(mediaService.bulkDelete(any(), eq(userId)))
+                .thenReturn(response);
+
+        String requestBody = """
+                {
+                  "ids": ["%s", "%s"]
+                }
+                """.formatted(mediaA, mediaB);
+
+        mockMvc.perform(post("/api/v1/media/bulk-delete")
+                        .with(jwt)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.deleted").value(2))
+                .andExpect(jsonPath("$.failed").value(0))
+                .andExpect(jsonPath("$.deletedIds.length()").value(2))
+                .andExpect(jsonPath("$.errors.length()").value(0));
+    }
+
+    @Test
+    void bulkDeleteMedia_WithAdminRole_ReturnsResponse() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID mediaA = UUID.randomUUID();
+        RequestPostProcessor jwt = jwtWithRole("ADMIN");
+        when(securityUtils.getCurrentUserId()).thenReturn(userId);
+
+        BulkDeleteMediaResponse response = new BulkDeleteMediaResponse()
+                .deleted(1)
+                .failed(0)
+                .deletedIds(List.of(mediaA))
+                .errors(List.of());
+
+        when(mediaService.bulkDelete(any(), eq(userId)))
+                .thenReturn(response);
+
+        String requestBody = """
+                {
+                  "ids": ["%s"]
+                }
+                """.formatted(mediaA);
+
+        mockMvc.perform(post("/api/v1/media/bulk-delete")
+                        .with(jwt)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.deleted").value(1));
+    }
+
+    @Test
+    void bulkDeleteMedia_WithoutRequiredRole_Returns403() throws Exception {
+        RequestPostProcessor jwt = jwtWithRole("CUSTOMER");
+        UUID mediaA = UUID.randomUUID();
+
+        String requestBody = """
+                {
+                  "ids": ["%s"]
+                }
+                """.formatted(mediaA);
+
+        mockMvc.perform(post("/api/v1/media/bulk-delete")
+                        .with(jwt)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void bulkDeleteMedia_Unauthenticated_Returns401() throws Exception {
+        UUID mediaA = UUID.randomUUID();
+
+        String requestBody = """
+                {
+                  "ids": ["%s"]
+                }
+                """.formatted(mediaA);
+
+        mockMvc.perform(post("/api/v1/media/bulk-delete")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void bulkDeleteMedia_EmptyIds_Returns400() throws Exception {
+        RequestPostProcessor jwt = jwtWithRole("AUTHOR");
+
+        String requestBody = """
+                {
+                  "ids": []
+                }
+                """;
+
+        mockMvc.perform(post("/api/v1/media/bulk-delete")
+                        .with(jwt)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void bulkDeleteMedia_MissingIdsField_Returns400() throws Exception {
+        RequestPostProcessor jwt = jwtWithRole("AUTHOR");
+
+        mockMvc.perform(post("/api/v1/media/bulk-delete")
+                        .with(jwt)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
+    }
+
 
     private RequestPostProcessor jwtWithRole(String role) {
         return SecurityMockMvcRequestPostProcessors.jwt()

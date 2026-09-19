@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.NoSuchBucketException;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 
 import java.time.OffsetDateTime;
@@ -47,19 +48,17 @@ public class OrphanedUploadCleanupService {
 
         for (MediaAsset asset : staleAssets) {
             try {
-                try {
-                    s3Client.deleteObject(DeleteObjectRequest.builder()
-                            .bucket(asset.getBucketName())
-                            .key(asset.getFileKey())
-                            .build());
-                } catch (NoSuchKeyException e) {
-                    log.debug("No S3 object for asset {} – skipping deletion", asset.getId());
+                deleteQuietly(asset.getBucketName(), asset.getFileKey());
+                if (asset.getThumbnailKey() != null) {
+                    deleteQuietly(asset.getBucketName(), asset.getThumbnailKey());
+                }
+                if (asset.getLargeKey() != null) {
+                    deleteQuietly(asset.getBucketName(), asset.getLargeKey());
                 }
 
                 asset.setStatus(MediaStatus.FAILED);
                 repository.save(asset);
                 successCount++;
-                log.info("Marked orphaned upload {} as FAILED", asset.getId());
             } catch (Exception e) {
                 failureCount++;
                 log.error("Failed to clean up orphaned upload {}: {}", asset.getId(), e.getMessage(), e);
@@ -67,5 +66,15 @@ public class OrphanedUploadCleanupService {
         }
 
         log.info("Orphan cleanup completed. Success: {}, Failures: {}", successCount, failureCount);
+    }
+    private void deleteQuietly(String bucket, String key) {
+        try {
+            s3Client.deleteObject(DeleteObjectRequest.builder()
+                    .bucket(bucket).key(key).build());
+        } catch (NoSuchKeyException | NoSuchBucketException e) {
+            log.debug("No object {}/{} to delete", bucket, key);
+        } catch (Exception e) {
+            log.warn("Failed to delete {}/{}: {}", bucket, key, e.getMessage());
+        }
     }
 }
