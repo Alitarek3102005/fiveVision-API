@@ -1,0 +1,37 @@
+services:
+  - type: web
+    name: 5vision-backend
+    env: docker
+    plan: free
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: DB_URL
+        sync: false
+      - key: DB_USERNAME
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: KEYCLOAK_ISSUER_URI
+        sync: false
+      - key: KEYCLOAK_ADMIN_SERVER_URL
+        sync: false
+      - key: KEYCLOAK_ADMIN_REALM
+        sync: false
+      - key: KEYCLOAK_ADMIN_CLIENT_ID
+        sync: false
+      - key: KEYCLOAK_ADMIN_CLIENT_SECRET
+        sync: false
+      - key: MINIO_ENDPOINT
+        sync: false
+      - key: MINIO_ACCESS_KEY
+        sync: false
+      - key: MINIO_SECRET_KEY
+        sync: false
+      - key: MINIO_BUCKET_NAME
+        value: 5vision-media
+      - key: MINIO_REGION
+        value: us-east-1
+      - key: CLAMAV_HOST
+        value: localhost
+      - key: CLAMAV_PORT
+        value: 3310
